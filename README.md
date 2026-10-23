@@ -40,3 +40,8 @@ Never commit a real `.env`, WhatsApp session files, pairing codes, API keys, or 
 ## Erfan MD feature parity
 
 This repository is not yet a complete copy of every command shown by Erfan MD. The public reference describes broad command categories and notes that availability depends on the actual bot and server configuration. M.H.E. will add compatible features in tested batches and show only commands that are implemented.
+
+
+## Next command batch
+
+General utilities planned for this build: uptime, bot info, chat ID, text reversal, random choice, dice and coin toss. These will be marked active only after the corresponding source changes and runtime checks succeed.
