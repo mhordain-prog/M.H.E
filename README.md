@@ -1,138 +1,42 @@
-<p align="center">
-  <a href="https://git.io/typing-svg">
-    <img src="https://readme-typing-svg.demolab.com?font=Black+Ops+One&size=80&pause=1000&color=8A2BE2&center=true&vCenter=true&width=1000&height=200&lines=INCONNU+XD+V2;VERSION+2.0.0;BY+INCONNU+BOY+TECH" alt="Typing SVG" />
-  </a>
-</p>
+# M.H.E. — WhatsApp Bot
 
-<p align="center">
-  <img src="https://files.catbox.moe/e1k73u.jpg" width="800"/>
-</p>
----
+M.H.E. is a separate WhatsApp multi-device bot project. It uses pairing codes only; the web page does not display a QR code.
 
-## ⭐ Fork the Repository
+## Current implemented commands
 
-Click the button below to fork the repository and get your own copy:
+The menu count is calculated from the registered command handlers; it is not a claimed total for every Erfan MD command.
 
-[![FORK REPO](https://img.shields.io/badge/FORK%20REPO-Click%20Here-007ACC?style=for-the-badge&logo=github)](https://github.com/INCONNU-BOY/INCONNU-XD-V2/fork)
+- General: `.menu`, `.help`, `.ping`, `.alive`, `.owner`
+- Owner: `.mode private`, `.mode public`
+- Group admin: `.tagall`, `.kick`, `.promote`, `.demote`, `.welcome on/off`, `.goodbye on/off`
 
----
-## ⚙️ GET YOUR SESSION 
+Group moderation commands check both the actor's group-admin status and whether M.H.E. itself is a group admin. Additional command families should be added as tested modules; commands requiring third-party APIs need the relevant API credentials.
 
-[![PAIR CODE](https://img.shields.io/badge/GET%20SESSION_ID-Generate%20Now-3F51B5?style=for-the-badge&logo=whatsapp)](https://inconnu-tech-web-session-id.onrender.com/)
+## Run
 
+Requires Node.js 20 or 22.
 
----
-## ⌛ WHATSAPP CHANNEL SUPPORT 
-
-[![INCONNU BOY TECH](https://img.shields.io/badge/JOIN%20MY-WHATSAPP%20CHANNEL-25D366?style=for-the-badge&logo=whatsapp)](https://whatsapp.com/channel/0029VbC6It7K0IBkQwaKYd2J)
-
----
-
-## 🚀 Quick Deployment Options
-
-### <br>   DEPLOY_HEROKU 
-
-------------
- 
-[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://dashboard.heroku.com/new-app?template=https://github.com/INCONNU-BOY/INCONNU-XD-V2)
-
-----------
-
-### <br>   DEPLOY_TALKDROVE 
-
-<a href='https://host.talkdrove.com/dashboard/select-bot/prepare-deployment?botId=51' target="_blank"><img alt='DEPLOY' src='https://img.shields.io/badge/DEPLOY-NOW-h?color=navy&style=for-the-badge&logo=visualstudiocode'/></a></p>
-
-----------
-
-### <br>    DEPLOY_REPLIT 
-
--------------
-
-<p align="left"><a href="https://repl.it/github/INCONNU-BOY/INCONNU-XD-V2"> <img src='https://img.shields.io/badge/-REPLIT-orange?style=for-the-badge&logo=replit&logoColor=white'/></a>
-
---------------
-
-### <br>   DEPLOY_KOYEB 
----------
-
-<a href='https://app.koyeb.com/auth/signin' target="_blank"><img alt='DEPLOY' src='https://img.shields.io/badge/-KOYEB-blue?style=for-the-badge&logo=koyeb&logoColor=white'/></a>
-
-------------
-
-### <br>   DEPLOY_RAILWAY 
-
-
--------------
-
-<a href='https://railway.app/new' target="_blank"><img alt='DEPLOY' src='https://img.shields.io/badge/RAILWAY-h?color=black&style=for-the-badge&logo=railway'/></a></p>
-
----------------
-
-### <br>  MORE DEPLOY METHOD 
-
---------
-
-### <br>    DEPLOY_GLITCH 
-
-<a href='https://glitch.com/signup' target="_blank"><img alt='DEPLOY' src='https://img.shields.io/badge/GLITCH-h?color=pink&style=for-the-badge&logo=glitch'/></a></p>
-
---------
-
-### <br>    DEPLOY_CODESPACE 
-
-<a href='https://github.com/codespaces/new' target="_blank"><img alt='DEPLOY' src='https://img.shields.io/badge/CODESPACE-h?color=navy&style=for-the-badge&logo=visualstudiocode'/></a></p>
-
---------
-
-### <br>    DEPLOY_RENDER 
-
-<a href='https://dashboard.render.com' target="_blank"><img alt='DEPLOY' src='https://img.shields.io/badge/RENDER-h?color=maroon&style=for-the-badge&logo=render'/></a></p>
-
-
-
-⚡ DEPLOY ON WORKFLOW ⚡
-
+```sh
+npm install
+npm start
 ```
 
-   name: Node.js CI
+Set environment variables in the hosting provider's secret-variable settings, not in committed files:
 
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+- `PORT` — supplied automatically by most hosts
+- `BOT_NAME=M.H.E.`
+- `PREFIX=.`
+- `BOT_MODE=private` (default)
+- `OWNER_NUMBERS=` — optional comma-separated trusted numbers, digits only
+- `SESSION_DIR=/app/sessions` — use a persistent volume in production
+- `SETTINGS_FILE=/app/data/settings.json`
 
-jobs:
-  build:
+The web interface is served from `index.html`. `POST /api/pair` requests a pairing code and has a cooldown. The code is returned only in the HTTP response and is not deliberately printed to logs. Keep the hosting dashboard and session volume private.
 
-    runs-on: ubuntu-latest
+## Important security note
 
-    strategy:
-      matrix:
-        node-version: [20.x]
+Never commit a real `.env`, WhatsApp session files, pairing codes, API keys, or credentials. If any secret was ever committed to a public repository, deleting the file is not enough: rotate the secret because it may remain in Git history.
 
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+## Erfan MD feature parity
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: ${{ matrix.node-version }}
-
-    - name: Install dependencies
-      run: npm install
-
-    - name: Start application
-      run: npm start 
-        
-```
-
-## ❤️ Credits
-[![GitHub - INCONNU-BOY](https://img.shields.io/badge/GitHub-INCONNU--BOY-181717?style=for-the-badge&logo=github)](https://github.com/INCONNU-BOY)
-
----
-
-![MADE BY INCONNU BOY](https://img.shields.io/badge/MADE%20BY-INCONNU%20BOY-blueviolet?style=for-the-badge&logo=markdown)
+This repository is not yet a complete copy of every command shown by Erfan MD. The public reference describes broad command categories and notes that availability depends on the actual bot and server configuration. M.H.E. will add compatible features in tested batches and show only commands that are implemented.
