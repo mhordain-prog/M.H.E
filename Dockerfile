@@ -1,20 +1,8 @@
-# Use official Node.js imag
-FROM node:20-buster
-
-# Set the working directory inside the container
+FROM node:20-bookworm-slim
 WORKDIR /app
-
-# Copy package.json and package-lock.json to the container
 COPY package*.json ./
-
-# Install the application dependencies
-RUN npm install && npm install -g pm2
-
-# Copy the rest of the application files into the container
+RUN npm install --omit=dev
 COPY . .
-
-# Expose the port your app will be running on
-EXPOSE 8000
-
-# Command to run the app
+ENV NODE_ENV=production
+EXPOSE 3000
 CMD ["npm", "start"]
