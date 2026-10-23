@@ -1,19 +1,67 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="description" content="INCONNU XD WEBSITE">
-	  <meta name="keywords" content="INCONNU XD WEB">
-  	<meta name="author" content="INCONNU XD">
-    <title>© INCONNU BOY 2025</title>
-    <link rel="stylesheet" href="./lib/style.css">
-    <link rel="icon" href="files/favicon.png">
-  
-    <section id="showcase">
-      <div class="container">
-      				<div class="dark">
-        <h1 class="dark">INCONNU-XD DEPLOYED SUCCESSFULLY MADE BY INCONNU BOY</h1>
-         <p class="dark"><a href="https://whatsapp.com/channel/0029Vb6T8td5K3zQZbsKEU1R"><h1>Follow Wachnnel For Updates</h1></a></p>
-        </for     </div>
-      </div>
-      
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#100808">
+  <meta name="description" content="M.H.E. — connexion WhatsApp par code d’appairage.">
+  <title>M.H.E. — Connexion WhatsApp</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0b090a;--panel:#171112;--red:#e11d2e;--text:#f8eeee;--muted:#bdaeb0}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#3a1017 0,#0b090a 55%);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;display:grid;place-items:center;padding:22px}
+    main{width:min(100%,480px);background:rgba(23,17,18,.96);border:1px solid #54212a;border-radius:22px;padding:28px;box-shadow:0 18px 70px #0008}
+    .mark{width:58px;height:58px;display:grid;place-items:center;border-radius:16px;background:#351017;color:#ff6472;font-size:25px;font-weight:900;border:1px solid #8f2432}
+    h1{margin:16px 0 4px;font-size:30px;letter-spacing:.08em}p{color:var(--muted);margin-top:8px}
+    label{display:block;font-weight:650;margin:22px 0 8px}input{width:100%;padding:14px;border:1px solid #59333a;border-radius:12px;background:#0d0a0b;color:white;font-size:17px;outline:none}input:focus{border-color:#f04454}
+    button{border:0;border-radius:12px;padding:13px 16px;font-weight:750;font-size:15px;cursor:pointer}
+    #generate{width:100%;margin-top:14px;background:var(--red);color:white}#copy{background:#332024;color:#fff;border:1px solid #69404a}
+    #result{margin-top:18px;padding:16px;border:1px solid #56313a;border-radius:14px;background:#100b0d;display:none}#code{font-size:25px;letter-spacing:.12em;font-weight:850;margin:8px 0 12px;word-break:break-word}
+    #status{min-height:24px;font-size:14px;color:#ffc0c5}.warning{font-size:13px;border-left:3px solid var(--red);padding-left:12px;margin-top:22px}
+    .small{font-size:12px;text-align:center;margin-top:20px}
+    button:disabled{opacity:.6;cursor:wait}
+  </style>
+</head>
+<body>
+<main>
+  <div class="mark" aria-hidden="true">M</div>
+  <h1>M.H.E.</h1>
+  <p>Connecte ton compte WhatsApp avec un code d’appairage. Aucun QR code n’est utilisé ici.</p>
+  <form id="pair-form">
+    <label for="number">Numéro WhatsApp avec indicatif du pays</label>
+    <input id="number" name="number" inputmode="tel" autocomplete="tel" placeholder="Ex. 24206XXXXXXX" required minlength="10" maxlength="15">
+    <button id="generate" type="submit">Générer le code</button>
+  </form>
+  <section id="result" aria-live="polite">
+    <strong>Ton code d’appairage</strong>
+    <div id="code"></div>
+    <button id="copy" type="button">Copier le code</button>
+  </section>
+  <p id="status" role="status"></p>
+  <p class="warning"><strong>Important :</strong> saisis le code uniquement dans WhatsApp → Appareils connectés → Connecter un appareil → Connecter avec un numéro de téléphone. Ne partage jamais ce code avec qui que ce soit.</p>
+  <p class="small">M.H.E. est un projet indépendant, non affilié à WhatsApp ou Meta. Les outils non officiels peuvent présenter des risques pour ton compte.</p>
+</main>
+<script>
+const form=document.querySelector('#pair-form');
+const numberInput=document.querySelector('#number');
+const generate=document.querySelector('#generate');
+const result=document.querySelector('#result');
+const codeEl=document.querySelector('#code');
+const statusEl=document.querySelector('#status');
+document.querySelector('#copy').addEventListener('click',async()=>{
+  const code=codeEl.textContent.replace(/-/g,'');
+  try{await navigator.clipboard.writeText(code);statusEl.textContent='Code copié. Ne le partage avec personne.'}
+  catch{statusEl.textContent='Copie automatique indisponible : sélectionne le code et copie-le manuellement.'}
+});
+form.addEventListener('submit',async(event)=>{
+  event.preventDefault();result.style.display='none';statusEl.textContent='Demande en cours…';generate.disabled=true;
+  try{
+    const response=await fetch('/api/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({number:numberInput.value})});
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.error||'Le code n’a pas pu être généré.');
+    codeEl.textContent=data.code;result.style.display='block';statusEl.textContent='Code généré. Saisis-le directement dans WhatsApp.';
+  }catch(error){statusEl.textContent=error.message||'Erreur de connexion au serveur.'}
+  finally{generate.disabled=false}
+});
+</script>
+</body>
+</html>
