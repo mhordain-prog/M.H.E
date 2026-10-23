@@ -24,7 +24,7 @@ const logger = pino({ level: process.env.LOG_LEVEL || 'warn' });
 const app = express();
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '2kb' }));
-app.use(express.static('.'));
+app.get('/', (_req, res) => res.sendFile(path.resolve('index.html')));
 
 let socket;
 let authState;
