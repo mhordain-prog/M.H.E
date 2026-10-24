@@ -306,6 +306,79 @@ function registerFontCommands() {
 }
 registerFontCommands();
 
+
+const MHE_DOWNLOAD_ALIASES = [
+  'download', 'play', 'video', 'song', 'ytmp3', 'ytmp4',
+  'tiktok', 'tiktok2', 'tiktok3', 'tt', 'fb', 'facebook',
+  'ig', 'igdl', 'igdl2', 'igdl3', 'instagram', 'apk', 'modapk',
+  'mediafire', 'mega', 'gdrive', 'gdrivedl', 'pinterest',
+  'pinterestimg', 'twitter', 'capcut', 'tiktoksearch',
+];
+function identifyDownloadTarget(input) {
+  let parsed;
+  try { parsed = new URL(input); } catch { return null; }
+  if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+  const host = parsed.hostname.toLowerCase();
+  if (host === 'localhost' || host.endsWith('.localhost') || host === '127.0.0.1' || host === '::1'
+    || /^10\\./.test(host) || /^192\\.168\\./.test(host) || /^172\\.(1[6-9]|2\\d|3[01])\\./.test(host)) return null;
+  if (/youtube\\.com$|youtu\\.be$/.test(host)) return 'YouTube';
+  if (/tiktok\\.com$/.test(host)) return 'TikTok';
+  if (/facebook\\.com$|fb\\.watch$/.test(host)) return 'Facebook';
+  if (/instagram\\.com$/.test(host)) return 'Instagram';
+  if (/twitter\\.com$|x\\.com$/.test(host)) return 'X / Twitter';
+  if (/mediafire\\.com$/.test(host)) return 'MediaFire';
+  if (/drive\\.google\\.com$/.test(host)) return 'Google Drive';
+  if (/mega\\.nz$/.test(host)) return 'MEGA';
+  if (/pinterest\\.com$/.test(host)) return 'Pinterest';
+  if (/capcut\\.com$/.test(host)) return 'CapCut';
+  return 'Lien direct';
+}
+function isDirectDownloadUrl(input) {
+  try {
+    const parsed = new URL(input);
+    return /\\.(mp3|m4a|ogg|wav|mp4|webm|mov|jpg|jpeg|png|webp|gif|pdf|zip|apk)$/i.test(parsed.pathname);
+  } catch { return false; }
+}
+for (const alias of MHE_DOWNLOAD_ALIASES) {
+  register(alias, 'TÉLÉCHARGEMENT', 'Détecter la plateforme ou traiter un lien direct', async ({ chat, args }) => {
+    const input = args.join(' ').trim();
+    if (!input) {
+      await sendText(chat,
+        '╭┈───〔 M.H.E DOWNLOAD 〕┈───⊷\\n' +
+        '├ .download <lien> — détecter une plateforme\\n' +
+        '├ .play <recherche> — nécessite un fournisseur YouTube configuré\\n' +
+        '├ .video <recherche> — nécessite un fournisseur YouTube configuré\\n' +
+        '╰───────────────────⊷\\n\\n' +
+        'Les téléchargements sociaux nécessitent une API réelle configurée. Les alias sont enregistrés, mais cela ne signifie pas que chaque plateforme est déjà prise en charge.'
+      );
+      return;
+    }
+    const platform = identifyDownloadTarget(input);
+    if (!platform) throw new Error('Lien HTTP/HTTPS invalide ou adresse locale refusée.');
+    if (platform === 'Lien direct' && isDirectDownloadUrl(input)) {
+      const ext = new URL(input).pathname.split('.').pop()?.toLowerCase() || 'bin';
+      const mimeByExt = {
+        mp3: 'audio/mpeg', m4a: 'audio/mp4', ogg: 'audio/ogg', wav: 'audio/wav',
+        mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
+        jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+        gif: 'image/gif', pdf: 'application/pdf', zip: 'application/zip',
+        apk: 'application/vnd.android.package-archive',
+      };
+      await sendText(chat, '⬇️ Lien direct détecté. Je transmets le fichier si WhatsApp peut le récupérer depuis cette URL.');
+      await socket.sendMessage(chat, {
+        document: { url: input },
+        mimetype: mimeByExt[ext] || 'application/octet-stream',
+        fileName: decodeURIComponent(new URL(input).pathname.split('/').pop() || `download.${ext}`),
+        caption: 'M.H.E-MD — lien direct',
+      });
+      return;
+    }
+    throw new Error(
+      `${platform} détecté, mais aucun fournisseur de téléchargement fiable n'est configuré pour cette plateforme. Aucun faux lien API n'a été ajouté. Configure une API documentée avant d'activer ce téléchargement.`
+    );
+  });
+}
+
 app.get('/health', (_req, res) => {
   res.json({
     ok: true,
