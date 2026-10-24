@@ -349,7 +349,7 @@ for (const action of ['acceptall', 'rejectall']) {
         logger.warn({ err: error, group: chat }, 'Could not process group join request');
       }
     }
-    await sendText(chat, `Traitement terminé : ${completed}/${requests.length} demande(s) ${action === 'acceptall' ? 'acceptée(s)' : 'refusée(s)}.`);
+    await sendText(chat, `Traitement terminé : ${completed}/${requests.length} demande(s) ${action === 'acceptall' ? 'acceptée(s)' : 'refusée(s)'}.`);
   });
 }
 for (const alias of ['del', 'delete']) {
