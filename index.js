@@ -878,14 +878,14 @@ async function startWhatsApp() {
     for (const message of messages) {
       if (!message.message || message.key.remoteJid === 'status@broadcast') continue;
       const text = messageText(message).trim();
-      if (await handleMheGoldIncoming(message, { mode })) continue;
-      if (!text.startsWith(PREFIX)) continue;
-      const [name, ...args] = text.slice(PREFIX.length).trim().split(/\s+/);
-      if (!name) continue;
       const actor = senderJid(message);
       const actorNumber = cleanNumber(actor);
       const blocked = (settings.banned || []).some((item) => cleanNumber(item) === actorNumber);
       if (blocked && !message.key.fromMe) continue;
+      if (await handleMheGoldIncoming(message, { mode })) continue;
+      if (!text.startsWith(PREFIX)) continue;
+      const [name, ...args] = text.slice(PREFIX.length).trim().split(/\s+/);
+      if (!name) continue;
       const connectedOwnerNumber = cleanNumber(socket?.user?.id || '');
       const isOwner = Boolean(message.key.fromMe)
         || (connectedOwnerNumber && actorNumber === connectedOwnerNumber)
