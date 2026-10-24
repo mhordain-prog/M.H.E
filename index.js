@@ -425,26 +425,26 @@ for (const alias of MHE_TOOLS_ALIASES) {
     if (alias === 'fancy') {
       if (!value) throw new Error(`Utilise ${PREFIX}fancy Bonjour pour obtenir six styles de texte.`);
       const styles = makeFancyText(value);
-      await sendText(chat, `╭┈───〔 M.H.E FANCY 〕┈───⊷\\n${styles.join('\\n')}\\n╰───────────────────⊷`);
+      await sendText(chat, `╭┈───〔 M.H.E FANCY 〕┈───⊷\n${styles.join('\n')}\n╰───────────────────⊷`);
       return;
     }
     if (alias === 'flag') {
       const flag = countryCodeToFlag(value);
       if (!flag) throw new Error(`Utilise un code pays à deux lettres, par exemple ${PREFIX}flag CG.`);
-      await sendText(chat, `Drapeau correspondant au code ${value.toUpperCase()} : ${flag}\\nNote : l'affichage dépend de l'appareil.`);
+      await sendText(chat, `Drapeau correspondant au code ${value.toUpperCase()} : ${flag}\nNote : l'affichage dépend de l'appareil.`);
       return;
     }
     if (alias === 'hashtag') {
       if (!value) throw new Error(`Utilise ${PREFIX}hashtag un sujet`);
-      const tags = value.normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '')
-        .split(/[^\\p{L}\\p{N}_]+/u).filter(Boolean).slice(0, 20)
+      const tags = value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+        .split(/[^\p{L}\p{N}_]+/u).filter(Boolean).slice(0, 20)
         .map((word) => `#${word}`);
       await sendText(chat, tags.join(' '));
       return;
     }
     if (alias === 'boost') {
       if (!value) throw new Error(`Utilise ${PREFIX}boost ton texte`);
-      await sendText(chat, `✨ ${value} ✨\\n\\n— M.H.E-MD`);
+      await sendText(chat, `✨ ${value} ✨\n\n— M.H.E-MD`);
       return;
     }
     if (alias === 'ssweb') {
@@ -455,8 +455,8 @@ for (const alias of MHE_TOOLS_ALIASES) {
       if (!['http:', 'https:'].includes(parsed.protocol)
         || ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname)
         || parsed.hostname.endsWith('.localhost')
-        || /^10\\./.test(parsed.hostname) || /^192\\.168\\./.test(parsed.hostname)
-        || /^172\\.(1[6-9]|2\\d|3[01])\\./.test(parsed.hostname)) {
+        || /^10\./.test(parsed.hostname) || /^192\.168\./.test(parsed.hostname)
+        || /^172\.(1[6-9]|2\d|3[01])\./.test(parsed.hostname)) {
         throw new Error('Cette URL n’est pas autorisée.');
       }
       throw new Error('La capture d’écran nécessite un fournisseur de capture configuré. Aucun service fictif n’a été ajouté.');
@@ -469,12 +469,12 @@ for (const alias of MHE_TOOLS_ALIASES) {
     }
     if (alias === 'mhe-tools') {
       await sendText(chat,
-        '╭┈───〔 M.H.E TOOLS GOLD 〕┈───⊷\\n' +
-        '├ Texte : .fancy, .hashtag, .boost\\n' +
-        '├ Drapeau : .flag CG\\n' +
-        '├ Capture : .ssweb https://example.com (fournisseur requis)\\n' +
-        '├ Images : .remini, .removebg, .blur, .unblur (fournisseur requis)\\n' +
-        '╰───────────────────⊷\\n' +
+        '╭┈───〔 M.H.E TOOLS GOLD 〕┈───⊷\n' +
+        '├ Texte : .fancy, .hashtag, .boost\n' +
+        '├ Drapeau : .flag CG\n' +
+        '├ Capture : .ssweb https://example.com (fournisseur requis)\n' +
+        '├ Images : .remini, .removebg, .blur, .unblur (fournisseur requis)\n' +
+        '╰───────────────────⊷\n' +
         'Les alias sont enregistrés, mais les traitements d’image ne sont pas annoncés comme actifs tant qu’un service réel n’est pas configuré.'
       );
       return;
