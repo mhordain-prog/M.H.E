@@ -7,6 +7,7 @@ M.H.E. is a separate WhatsApp multi-device bot project. It uses pairing codes on
 The menu count is calculated from the registered command handlers; it is not a claimed total for every Erfan MD command.
 
 - General: `.menu`, `.help`, `.ping`, `.alive`, `.owner`, `.uptime`, `.botinfo`, `.chatid`
+- Anime quiz: `.quiz anime` starts a multiple-choice quiz (A/B/C/D), `.quiz score` shows the score, and `.quiz stop` ends it. The question bank is shuffled and cycles indefinitely; answers are handled per conversation.
 - Text/fun: `.reverse`, `.choose`, `.dice`, `.coin`
 - Fonts: `.font 1 ton texte` et `.font1` à `.font12` (12 transformations Unicode réellement codées)
 - Tools: `.fancy`, `.hashtag`, `.boost`, `.flag` et les alias image `.remini`, `.removebg`, `.blur`, etc. Les transformations texte sont implémentées; les traitements d'image et captures nécessitent encore un fournisseur externe configuré.
@@ -52,9 +53,9 @@ This repository is not yet a complete copy of every command shown by Erfan MD. T
 
 Implemented in source (runtime deployment not yet verified): uptime, bot info, chat ID, text reversal, random choice, dice and coin toss. These are local utilities and do not require third-party API credentials.
 
-## M.H.E GOLD V2 — branche de fonctionnalité
+## M.H.E GOLD V2 — fusionné dans main
 
-Les commandes suivantes sont ajoutées dans la branche de travail et restent désactivées ou dépendantes d’une configuration :
+Les commandes suivantes sont présentes dans la branche principale et restent désactivées ou dépendantes d’une configuration :
 
 - `.mheai on`, `.mheai off`, `.mheai status` — assistant IA pour les messages privés. L’activation est réservée au propriétaire; les messages traités sont transmis au fournisseur IA configuré. Limites : 30 secondes entre deux réponses par contact et 12 réponses par contact par jour.
 - `.mheai message <instruction>` — personnaliser le prompt de l’assistant.
@@ -74,4 +75,4 @@ Variables secrètes pour la voix synthétique :
 
 N’ajoute jamais les clés API au dépôt. Les messages envoyés à l’assistant IA quittent WhatsApp et sont transmis au fournisseur configuré; n’active cette fonction que si cela convient aux personnes qui l’utilisent. La commande vocale reste indisponible tant qu’un modèle TTS actuellement pris en charge n’est pas configuré. Vérifie la documentation du fournisseur avant l’activation en production.
 
-Ces changements sont en cours de revue dans une pull request. Ils ne sont pas encore fusionnés ni déclarés déployés.
+Le module anime quiz est intégré dans une branche de fonctionnalité et doit passer la validation CI avant fusion. Le code présent dans GitHub ne signifie pas que le bot est déjà déployé sur un hébergeur.
