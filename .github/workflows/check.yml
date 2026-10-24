@@ -16,3 +16,5 @@ jobs:
           node-version: 20
       - run: npm install
       - run: npm run check
+      - run: node --check core/mhe-gold-v2.js
+      - run: npm test
