@@ -2,7 +2,7 @@
   "name": "mhe-whatsapp-bot",
   "version": "1.0.0",
   "private": true,
-  "description": "M.H.E. WhatsApp multi-device bot with pairing-code web page and modular commands",
+  "description": "M.H.E-MD GOLD WhatsApp multi-device bot with pairing-code web page and dynamic command menu",
   "type": "module",
   "main": "index.js",
   "scripts": {
