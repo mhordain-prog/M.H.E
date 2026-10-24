@@ -262,6 +262,50 @@ register('coin', 'FUN', 'Lancer une pièce', async ({ chat }) => {
   await sendText(chat, `🪙 Résultat : ${Math.random() < 0.5 ? 'Pile' : 'Face'}`);
 });
 
+
+function mapAlphabet(text, upperStart, lowerStart, exceptions = {}) {
+  return Array.from(text, (char) => {
+    if (exceptions[char]) return exceptions[char];
+    const code = char.codePointAt(0);
+    if (code >= 65 && code <= 90 && upperStart != null) return String.fromCodePoint(upperStart + code - 65);
+    if (code >= 97 && code <= 122 && lowerStart != null) return String.fromCodePoint(lowerStart + code - 97);
+    return char;
+  }).join('');
+}
+const fontStyles = [
+  (s) => mapAlphabet(s, 0x1D400, 0x1D41A),
+  (s) => mapAlphabet(s, 0x1D434, 0x1D44E, { h: 'ℎ' }),
+  (s) => mapAlphabet(s, 0x1D468, 0x1D482),
+  (s) => mapAlphabet(s, 0x1D5D4, 0x1D5EE),
+  (s) => mapAlphabet(s, 0x1D608, 0x1D622),
+  (s) => mapAlphabet(s, 0x1D63C, 0x1D656),
+  (s) => mapAlphabet(s, 0x1D670, 0x1D68A),
+  (s) => mapAlphabet(s, 0x1D538, 0x1D552, { C: 'ℂ', H: 'ℍ', N: 'ℕ', P: 'ℙ', Q: 'ℚ', R: 'ℝ', Z: 'ℤ' }),
+  (s) => mapAlphabet(s, 0x1D504, 0x1D51E, { C: 'ℭ', H: 'ℌ', I: 'ℑ', R: 'ℜ', Z: 'ℨ', e: 'ℯ', g: 'ℊ', o: 'ℴ' }),
+  (s) => mapAlphabet(s, 0x1D6A8, 0x1D6C2),
+  (s) => s.toUpperCase().split('').join(' '),
+  (s) => Array.from(s, (ch) => /[A-Za-z]/.test(ch) ? String.fromCodePoint(0x24B6 + (ch.toUpperCase().charCodeAt(0) - 65)) : ch).join(''),
+];
+function registerFontCommands() {
+  fontStyles.forEach((transform, index) => {
+    const number = index + 1;
+    register(`font${number}`, 'TEXTE / POLICES', `Convertir le texte en style décoratif ${number}`, async ({ chat, args }) => {
+      const value = args.join(' ');
+      if (!value) throw new Error(`Utilise ${PREFIX}font${number} ton texte.`);
+      await sendText(chat, transform(value));
+    });
+  });
+  register('font', 'TEXTE / POLICES', 'Utilisation : .font numéro texte (styles 1 à 12)', async ({ chat, args }) => {
+    const number = Number(args[0]);
+    const value = args.slice(1).join(' ');
+    if (!Number.isInteger(number) || number < 1 || number > fontStyles.length || !value) {
+      throw new Error(`Utilise ${PREFIX}font 1 ton texte (styles disponibles : 1 à ${fontStyles.length}).`);
+    }
+    await sendText(chat, fontStyles[number - 1](value));
+  });
+}
+registerFontCommands();
+
 app.get('/health', (_req, res) => {
   res.json({
     ok: true,
