@@ -21,6 +21,17 @@ const OWNER_NUMBERS = new Set(
     .filter(Boolean),
 );
 const logger = pino({ level: process.env.LOG_LEVEL || 'warn' });
+const STARTED_AT = Date.now();
+const DISPLAY_OWNER = process.env.OWNER_NAME || 'HORDAIN MADILA';
+const BOT_VERSION = process.env.BOT_VERSION || '3.0 NO STRESS';
+function formatUptime(ms) {
+  const totalSeconds = Math.floor(ms / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [days ? `${days}j` : '', hours ? `${hours}h` : '', minutes ? `${minutes}m` : '', `${seconds}s`].filter(Boolean).join(' ');
+}
 const app = express();
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '2kb' }));
@@ -135,11 +146,19 @@ register('menu', 'GÉNÉRAL', 'Afficher les commandes installées', async ({ cha
     categories.get(command.category).push(command);
   }
   const lines = [
-    `╭━━━〔 ${BOT_NAME} 〕━━━╮`,
-    `┃ Préfixe : ${PREFIX}`,
-    `┃ Mode : ${mode}`,
-    `┃ Commandes actives : ${commands.size}`,
-    '╰━━━━━━━━━━━━━━━━━━╯',
+    `╭┈───〔 ꧁༒ ${BOT_NAME} ༒꧂ 〕┈───⊷`,
+    '┃',
+    `├✦ 👑 Owner : ${DISPLAY_OWNER}`,
+    `├✦ ⚡ Commands : ${commands.size}`,
+    `├✦ ⏱️ Runtime : ${formatUptime(Date.now() - STARTED_AT)}`,
+    `├✦ 🔰 Prefix : ${PREFIX}`,
+    `├✦ 🔒 Mode : ${mode.toUpperCase()}`,
+    `├✦ 🩸 Version : ${BOT_VERSION}`,
+    '┃',
+    '╰━━━━━━━━━━━━━━━━━━⊷',
+    '',
+    '「 THE FINAL BOSS 」',
+    'M.H.E. — Toujours en évolution.',
     '',
   ];
   for (const [category, items] of categories) {
@@ -147,8 +166,8 @@ register('menu', 'GÉNÉRAL', 'Afficher les commandes installées', async ({ cha
     for (const item of items) lines.push(`│ ${PREFIX}${item.name} — ${item.description}`);
     lines.push('╰────────────');
   }
-  lines.push('', 'Les commandes listées sont celles enregistrées dans cette version.');
-  await sendText(chat, lines.join('\n'));
+  lines.push('', 'Le compteur affiche uniquement les commandes réellement enregistrées.');
+  await sendText(chat, lines.join('\\n'));
 });
 register('help', 'GÉNÉRAL', 'Afficher l’aide', async ({ chat }) => {
   await sendText(chat, `Utilise ${PREFIX}menu pour voir les ${commands.size} commandes actuellement enregistrées.`);
