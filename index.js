@@ -10,8 +10,8 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 
 const PORT = Number(process.env.PORT || 3000);
-const PREFIX = process.env.PREFIX || '.';
-const BOT_NAME = process.env.BOT_NAME || 'M.H.E.';
+let PREFIX = process.env.PREFIX || '.';
+let BOT_NAME = process.env.BOT_NAME || 'M.H.E.';
 const SESSION_DIR = process.env.SESSION_DIR || './sessions';
 const SETTINGS_FILE = process.env.SETTINGS_FILE || './data/settings.json';
 const OWNER_NUMBERS = new Set(
@@ -22,7 +22,7 @@ const OWNER_NUMBERS = new Set(
 );
 const logger = pino({ level: process.env.LOG_LEVEL || 'warn' });
 const STARTED_AT = Date.now();
-const DISPLAY_OWNER = process.env.OWNER_NAME || 'HORDAIN MADILA';
+let DISPLAY_OWNER = process.env.OWNER_NAME || 'HORDAIN MADILA';
 const BOT_VERSION = process.env.BOT_VERSION || '3.0 NO STRESS';
 function formatUptime(ms) {
   const totalSeconds = Math.floor(ms / 1000);
@@ -42,7 +42,7 @@ let authState;
 let saveCreds;
 let reconnectTimer;
 let mode = process.env.BOT_MODE === 'public' ? 'public' : 'private';
-let settings = { groups: {} };
+let settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true };
 let pairCooldownUntil = 0;
 const pairIpCooldowns = new Map();
 const PAIR_COOLDOWN_MS = 45_000;
@@ -51,8 +51,11 @@ const commands = new Map();
 async function loadSettings() {
   try {
     const parsed = JSON.parse(await fs.readFile(SETTINGS_FILE, 'utf8'));
-    settings = { groups: {}, ...parsed, groups: parsed.groups || {} };
+    settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true, ...parsed, groups: parsed.groups || {} };
     if (parsed.mode === 'public' || parsed.mode === 'private') mode = parsed.mode;
+    if (typeof parsed.prefix === 'string' && parsed.prefix.length > 0 && parsed.prefix.length <= 3) PREFIX = parsed.prefix;
+    if (typeof parsed.botname === 'string' && parsed.botname.trim()) BOT_NAME = parsed.botname;
+    if (typeof parsed.ownername === 'string' && parsed.ownername.trim()) DISPLAY_OWNER = parsed.ownername;
   } catch (error) {
     if (error.code !== 'ENOENT') logger.warn({ err: error }, 'Settings could not be read; using defaults');
   }
@@ -391,6 +394,144 @@ register('mhe-group', 'GROUPES', 'Afficher l’aide GROUP GOLD', async ({ chat }
     'Les commandes .newgc, .join, .invite, .gcpp, .chreact et les fonctions non listées ne sont pas activées dans ce pack.',
   ].join('\n'));
 });
+
+
+const MHE_OWNER_GOLD_ALIASES = [
+  'mhe-owner', 'prefix', 'botname', 'ownername', 'ownernumber', 'description', 'stickername',
+  'sudo', 'addsudo', 'delsudo', 'listsudo', 'ban', 'unban', 'banlist',
+  'welcome', 'goodbye', 'setwelcome', 'setgoodbye',
+  'antilink', 'antidelete', 'antitag', 'antistatusmention', 'antiedit', 'anticall',
+  'autoread', 'autotype', 'autotyping', 'autoreact', 'recording', 'online',
+  'statusview', 'statuslike', 'adminaction', 'settings', 'set', 'update',
+];
+function requireOwner(isOwner) {
+  if (!isOwner) throw new Error('Réservé au propriétaire du bot.');
+}
+function normalizeUserNumber(value = '') {
+  return value.replace(/[^0-9]/g, '');
+}
+for (const alias of ['prefix', 'botname', 'ownername']) {
+  register(alias, 'PROPRIÉTAIRE', 'Modifier la configuration du bot', async ({ chat, args, isOwner }) => {
+    requireOwner(isOwner);
+    const value = args.join(' ').trim();
+    if (!value) throw new Error(`Utilise ${PREFIX}${alias} valeur`);
+    if (alias === 'prefix') {
+      if (value.length > 3 || /\\s/.test(value)) throw new Error('Le préfixe doit faire entre 1 et 3 caractères, sans espace.');
+      PREFIX = value; settings.prefix = value;
+    } else if (alias === 'botname') {
+      BOT_NAME = value; settings.botname = value;
+    } else {
+      DISPLAY_OWNER = value; settings.ownername = value;
+    }
+    await saveSettings();
+    await sendText(chat, `✅ ${alias} mis à jour : ${value}`);
+  }, true);
+}
+register('ownernumber', 'PROPRIÉTAIRE', 'Afficher la configuration des numéros propriétaires', async ({ chat, isOwner }) => {
+  requireOwner(isOwner);
+  await sendText(chat, `OWNER_NUMBERS configurés : ${OWNER_NUMBERS.size ? [...OWNER_NUMBERS].join(', ') : 'aucun via variable d’environnement'}. Le compte WhatsApp connecté est aussi reconnu comme propriétaire.`);
+}, true);
+for (const alias of ['sudo', 'addsudo']) {
+  register(alias, 'PROPRIÉTAIRE', 'Ajouter un numéro SUDO', async ({ chat, args, isOwner }) => {
+    requireOwner(isOwner);
+    const number = normalizeUserNumber(args[0] || '');
+    if (number.length < 7 || number.length > 15) throw new Error(`Utilise ${PREFIX}${alias} numéro_international`);
+    settings.sudo ||= [];
+    if (!settings.sudo.includes(number)) settings.sudo.push(number);
+    await saveSettings();
+    await sendText(chat, `✅ SUDO ajouté : ${number}`);
+  }, true);
+}
+register('delsudo', 'PROPRIÉTAIRE', 'Retirer un numéro SUDO', async ({ chat, args, isOwner }) => {
+  requireOwner(isOwner);
+  const number = normalizeUserNumber(args[0] || '');
+  settings.sudo = (settings.sudo || []).filter((item) => item !== number);
+  await saveSettings();
+  await sendText(chat, `✅ SUDO retiré : ${number || 'numéro manquant'}`);
+}, true);
+register('listsudo', 'PROPRIÉTAIRE', 'Lister les numéros SUDO', async ({ chat, isOwner }) => {
+  requireOwner(isOwner);
+  await sendText(chat, (settings.sudo || []).length ? `SUDO :\\n${settings.sudo.join('\\n')}` : 'Aucun SUDO configuré.');
+}, true);
+register('ban', 'PROPRIÉTAIRE', 'Bloquer un utilisateur du bot', async ({ chat, message, args, isOwner }) => {
+  requireOwner(isOwner);
+  const mentioned = targetJids(message)[0];
+  const number = normalizeUserNumber(mentioned || args[0] || '');
+  if (number.length < 7 || number.length > 15) throw new Error(`Mentionne un utilisateur ou utilise ${PREFIX}ban numéro`);
+  const jid = mentioned || `${number}@s.whatsapp.net`;
+  settings.banned ||= [];
+  if (!settings.banned.includes(jid)) settings.banned.push(jid);
+  await saveSettings();
+  await sendText(chat, `⛔ Utilisateur bloqué pour les commandes du bot : ${jid}`);
+}, true);
+register('unban', 'PROPRIÉTAIRE', 'Débloquer un utilisateur du bot', async ({ chat, message, args, isOwner }) => {
+  requireOwner(isOwner);
+  const mentioned = targetJids(message)[0];
+  const raw = mentioned || args[0] || '';
+  const number = normalizeUserNumber(raw);
+  if (!number) throw new Error(`Utilise ${PREFIX}unban numéro ou mention`);
+  settings.banned = (settings.banned || []).filter((item) => normalizeUserNumber(item) !== number);
+  await saveSettings();
+  await sendText(chat, `✅ Utilisateur débloqué : ${number}`);
+}, true);
+register('banlist', 'PROPRIÉTAIRE', 'Afficher les utilisateurs bloqués', async ({ chat, isOwner }) => {
+  requireOwner(isOwner);
+  const list = settings.banned || [];
+  await sendText(chat, list.length ? `Utilisateurs bloqués : ${list.length}\\n${list.join('\\n')}` : 'Aucun utilisateur bloqué.');
+}, true);
+for (const alias of ['welcome', 'goodbye']) {
+  register(alias, 'PROPRIÉTAIRE', 'Activer ou désactiver les messages de bienvenue/départ', async ({ chat, args, isOwner }) => {
+    requireOwner(isOwner);
+    const state = (args[0] || '').toLowerCase();
+    if (!['on', 'off'].includes(state)) throw new Error(`Utilise ${PREFIX}${alias} on ou off`);
+    settings[alias] = state === 'on';
+    await saveSettings();
+    await sendText(chat, `✅ ${alias} : ${state.toUpperCase()}. Note : l’envoi automatique dépend du gestionnaire d’événements de groupe.`);
+  }, true);
+}
+for (const alias of ['setwelcome', 'setgoodbye']) {
+  register(alias, 'PROPRIÉTAIRE', 'Enregistrer le texte de bienvenue/départ', async ({ chat, args, isOwner }) => {
+    requireOwner(isOwner);
+    const value = args.join(' ').trim();
+    if (!value) throw new Error(`Utilise ${PREFIX}${alias} ton message`);
+    settings[alias] = value;
+    await saveSettings();
+    await sendText(chat, `✅ Texte ${alias} enregistré.`);
+  }, true);
+}
+for (const alias of ['antilink','antidelete','antitag','antistatusmention','antiedit','anticall','autoread','autotype','autotyping','autoreact','recording','online','statusview','statuslike','adminaction']) {
+  register(alias, 'PROPRIÉTAIRE', 'Modifier un réglage du bot', async ({ chat, args, isOwner }) => {
+    requireOwner(isOwner);
+    const state = (args[0] || '').toLowerCase();
+    if (!['on', 'off'].includes(state)) throw new Error(`Utilise ${PREFIX}${alias} on ou off`);
+    settings[alias] = state === 'on';
+    await saveSettings();
+    await sendText(chat, `✅ ${alias.toUpperCase()} : ${state.toUpperCase()}. Attention : ce réglage est enregistré; son effet dépend de son intégration dans le gestionnaire WhatsApp.`);
+  }, true);
+}
+register('settings', 'PROPRIÉTAIRE', 'Afficher les réglages enregistrés', async ({ chat, isOwner }) => {
+  requireOwner(isOwner);
+  const safe = { ...settings, sudo: settings.sudo || [], banned: settings.banned || [] };
+  await sendText(chat, `╭┈───〔 M.H.E OWNER GOLD 〕┈───⊷\\nMode : ${mode}\\nPréfixe : ${PREFIX}\\nBot : ${BOT_NAME}\\nPropriétaire affiché : ${DISPLAY_OWNER}\\nSUDO : ${safe.sudo.length}\\nBannis : ${safe.banned.length}\\nBienvenue : ${safe.welcome ? 'ON' : 'OFF'}\\nAu revoir : ${safe.goodbye ? 'ON' : 'OFF'}\\nAntilink : ${safe.antilink ? 'ON' : 'OFF'}\\n╰───────────────────⊷`);
+}, true);
+register('mhe-owner', 'PROPRIÉTAIRE', 'Afficher l’aide OWNER GOLD', async ({ chat, isOwner }) => {
+  requireOwner(isOwner);
+  await sendText(chat, [
+    '╭┈───〔 M.H.E OWNER GOLD 〕┈───⊷',
+    '├ .mode public/private',
+    '├ .prefix !',
+    '├ .botname M.H.E-MD',
+    '├ .ownername HORDAIN MADILA',
+    '├ .sudo numéro / .delsudo numéro / .listsudo',
+    '├ .ban numéro / .unban numéro / .banlist',
+    '├ .welcome on/off / .goodbye on/off',
+    '├ .setwelcome texte / .setgoodbye texte',
+    '├ .antilink on/off / .autoread on/off / .autoreact on/off',
+    '├ .settings',
+    '╰───────────────────⊷',
+    'Les réglages sans intégration dans le gestionnaire ne changent pas encore automatiquement le comportement du bot.',
+  ].join('\\n'));
+}, true);
 
 register('uptime', 'GÉNÉRAL', 'Afficher le temps de fonctionnement', async ({ chat }) => {
   await sendText(chat, `⏱️ ${BOT_NAME} actif depuis ${formatUptime(Date.now() - STARTED_AT)}.`);
