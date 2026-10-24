@@ -69,9 +69,9 @@ Variables secrètes facultatives pour l’IA :
 Variables secrètes pour la voix synthétique :
 - `MHE_TTS_API_KEY` — clé audio, ou réutilisation de la clé IA.
 - `MHE_TTS_BASE_URL` — racine de l’API de synthèse vocale.
-- `MHE_TTS_MODEL` — modèle audio configuré; par défaut `gpt-4o-mini-tts`.
+- `MHE_TTS_MODEL` — nom explicite d’un modèle de synthèse vocale encore pris en charge; requis pour éviter de choisir automatiquement un modèle en fin de vie.
 - `MHE_TTS_VOICE` — voix synthétique intégrée, par défaut `coral`.
 
-N’ajoute jamais les clés API au dépôt. Les messages envoyés à l’assistant IA quittent WhatsApp et sont transmis au fournisseur configuré; n’active cette fonction que si cela convient aux personnes qui l’utilisent. Le modèle TTS par défaut est signalé comme obsolète par la documentation actuelle et devra être remplacé avant sa date d’arrêt annoncée; vérifie la documentation du fournisseur avant d’activer la voix en production.
+N’ajoute jamais les clés API au dépôt. Les messages envoyés à l’assistant IA quittent WhatsApp et sont transmis au fournisseur configuré; n’active cette fonction que si cela convient aux personnes qui l’utilisent. La commande vocale reste indisponible tant qu’un modèle TTS actuellement pris en charge n’est pas configuré. Vérifie la documentation du fournisseur avant l’activation en production.
 
 Ces changements sont en cours de revue dans une pull request. Ils ne sont pas encore fusionnés ni déclarés déployés.
