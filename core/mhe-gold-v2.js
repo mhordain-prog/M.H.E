@@ -157,13 +157,12 @@ export function registerMheGoldV2({ register, sendText, settings, saveSettings, 
     if (text.length > TTS_MAX_CHARS) throw new Error(`Le texte est limité à ${TTS_MAX_CHARS} caractères.`);
     const socket = getSocket();
     if (!socket) throw new Error('La connexion WhatsApp n’est pas prête.');
-    await sendText(chat, '🎙️ Génération de la voix synthétique originale en cours…');
+    await sendText(chat, '🎙️ Génération en cours. Avis : la voix envoyée sera synthétique et générée par IA, pas la voix réelle d’une personne.');
     const audio = await synthesizeOriginalVoice(text);
     await socket.sendMessage(chat, {
       audio,
       mimetype: 'audio/mpeg',
       fileName: 'mhe-voice-ai.mp3',
-      caption: '🎙️ Voix synthétique générée par IA — ce n’est pas la voix réelle d’une personne.',
       ptt: false,
     });
   });
@@ -183,10 +182,15 @@ export function registerMheGoldV2({ register, sendText, settings, saveSettings, 
     const countKey = `${day}:${sender}`;
     const count = aiDailyCounts.get(countKey) || 0;
     if (count >= AI_MAX_DAILY_REPLIES) return true;
+    if (aiDailyCounts.size > 5000) {
+      for (const key of aiDailyCounts.keys()) if (!key.startsWith(`${day}:`)) aiDailyCounts.delete(key);
+    }
+    if (aiCooldowns.size > 5000) {
+      for (const [key, timestamp] of aiCooldowns) if (now - timestamp > 24 * 60 * 60 * 1000) aiCooldowns.delete(key);
+    }
     aiCooldowns.set(sender, now);
     aiDailyCounts.set(countKey, count + 1);
     try {
-      await sendText(chat, '🤖 Réponse IA en préparation…');
       const reply = await openAIChatReply(text, state.systemPrompt);
       await sendText(chat, `🤖 M.H.E AI (réponse générée par IA)\n\n${reply}`);
     } catch (error) {
