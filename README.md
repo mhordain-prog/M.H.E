@@ -51,3 +51,27 @@ This repository is not yet a complete copy of every command shown by Erfan MD. T
 ## Next command batch
 
 Implemented in source (runtime deployment not yet verified): uptime, bot info, chat ID, text reversal, random choice, dice and coin toss. These are local utilities and do not require third-party API credentials.
+
+## M.H.E GOLD V2 — branche de fonctionnalité
+
+Les commandes suivantes sont ajoutées dans la branche de travail et restent désactivées ou dépendantes d’une configuration :
+
+- `.mheai on`, `.mheai off`, `.mheai status` — assistant IA pour les messages privés. L’activation est réservée au propriétaire; les messages traités sont transmis au fournisseur IA configuré. Limites : 30 secondes entre deux réponses par contact et 12 réponses par contact par jour.
+- `.mheai message <instruction>` — personnaliser le prompt de l’assistant.
+- `.mheghost 10 ton message` — envoie un message que le bot tente de supprimer après 5 à 60 secondes. WhatsApp ne peut pas empêcher les captures d’écran, copies ou transferts.
+- `.mheclone vocal <texte>` — génère une voix synthétique originale. Le bot annonce explicitement qu’il s’agit d’une voix générée par IA; cette commande n’imite pas la voix d’une personne réelle.
+
+Variables secrètes facultatives pour l’IA :
+- `MHE_AI_API_KEY` (ou `OPENAI_API_KEY`) — clé du fournisseur IA.
+- `MHE_AI_BASE_URL` — racine d’une API compatible avec le format Chat Completions; par défaut l’API OpenAI.
+- `MHE_AI_MODEL` — modèle à utiliser; par défaut `gpt-4o-mini`.
+
+Variables secrètes pour la voix synthétique :
+- `MHE_TTS_API_KEY` — clé audio, ou réutilisation de la clé IA.
+- `MHE_TTS_BASE_URL` — racine de l’API de synthèse vocale.
+- `MHE_TTS_MODEL` — modèle audio configuré; par défaut `gpt-4o-mini-tts`.
+- `MHE_TTS_VOICE` — voix synthétique intégrée, par défaut `coral`.
+
+N’ajoute jamais les clés API au dépôt. Les messages envoyés à l’assistant IA quittent WhatsApp et sont transmis au fournisseur configuré; n’active cette fonction que si cela convient aux personnes qui l’utilisent. Le modèle TTS par défaut est signalé comme obsolète par la documentation actuelle et devra être remplacé avant sa date d’arrêt annoncée; vérifie la documentation du fournisseur avant d’activer la voix en production.
+
+Ces changements sont en cours de revue dans une pull request. Ils ne sont pas encore fusionnés ni déclarés déployés.
