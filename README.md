@@ -6,7 +6,8 @@ M.H.E. is a separate WhatsApp multi-device bot project. It uses pairing codes on
 
 The menu count is calculated from the registered command handlers; it is not a claimed total for every Erfan MD command.
 
-- General: `.menu`, `.help`, `.ping`, `.alive`, `.owner`
+- General: `.menu`, `.help`, `.ping`, `.alive`, `.owner`, `.uptime`, `.botinfo`, `.chatid`
+- Text/fun: `.reverse`, `.choose`, `.dice`, `.coin`
 - Owner: `.mode private`, `.mode public`
 - Group admin: `.tagall`, `.kick`, `.promote`, `.demote`, `.welcome on/off`, `.goodbye on/off`
 
@@ -44,4 +45,4 @@ This repository is not yet a complete copy of every command shown by Erfan MD. T
 
 ## Next command batch
 
-General utilities planned for this build: uptime, bot info, chat ID, text reversal, random choice, dice and coin toss. These will be marked active only after the corresponding source changes and runtime checks succeed.
+Implemented in source (runtime deployment not yet verified): uptime, bot info, chat ID, text reversal, random choice, dice and coin toss. These are local utilities and do not require third-party API credentials.
