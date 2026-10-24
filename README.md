@@ -1,10 +1,10 @@
-# M.H.E. — WhatsApp Bot
+# M.H.E-MD GOLD — WhatsApp Bot
 
-M.H.E. is a separate WhatsApp multi-device bot project. It uses pairing codes only; the web page does not display a QR code.
+M.H.E-MD GOLD is a WhatsApp multi-device bot project. It uses pairing codes only; the web page does not display a QR code.
 
 ## Current implemented commands
 
-The menu count is calculated from the registered command handlers; it is not a claimed total for every Erfan MD command.
+The GOLD menu uses the registered command handlers dynamically: every command registered during startup is listed by category, and the count reflects the actual registry rather than an unverified total from another bot.
 
 - General: `.menu`, `.help`, `.ping`, `.alive`, `.owner`, `.uptime`, `.botinfo`, `.chatid`
 - Text/fun: `.reverse`, `.choose`, `.dice`, `.coin`
@@ -30,7 +30,7 @@ npm start
 Set environment variables in the hosting provider's secret-variable settings, not in committed files:
 
 - `PORT` — supplied automatically by most hosts
-- `BOT_NAME=M.H.E.`
+- `BOT_NAME=M.H.E-MD GOLD`
 - `PREFIX=.`
 - `BOT_MODE=private` (default)
 - `OWNER_NUMBERS=` — optional comma-separated trusted numbers, digits only

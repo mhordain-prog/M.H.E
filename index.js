@@ -12,7 +12,7 @@ import makeWASocket, {
 
 const PORT = Number(process.env.PORT || 3000);
 let PREFIX = process.env.PREFIX || '.';
-let BOT_NAME = process.env.BOT_NAME || 'M.H.E.';
+let BOT_NAME = process.env.BOT_NAME || 'M.H.E-MD GOLD';
 const SESSION_DIR = process.env.SESSION_DIR || './sessions';
 const SETTINGS_FILE = process.env.SETTINGS_FILE || './data/settings.json';
 const OWNER_NUMBERS = new Set(
@@ -24,7 +24,7 @@ const OWNER_NUMBERS = new Set(
 const logger = pino({ level: process.env.LOG_LEVEL || 'warn' });
 const STARTED_AT = Date.now();
 let DISPLAY_OWNER = process.env.OWNER_NAME || 'HORDAIN MADILA';
-const BOT_VERSION = process.env.BOT_VERSION || '3.0 NO STRESS';
+const BOT_VERSION = process.env.BOT_VERSION || '1.0.0 GOLD';
 function formatUptime(ms) {
   const totalSeconds = Math.floor(ms / 1000);
   const days = Math.floor(totalSeconds / 86400);
@@ -143,35 +143,53 @@ async function executeCommand(message, commandName, args, isOwner) {
   }
 }
 
-register('menu', 'GÉNÉRAL', 'Afficher les commandes installées', async ({ chat }) => {
+register('menu', 'GÉNÉRAL', 'Afficher toutes les commandes enregistrées dans le style GOLD', async ({ chat }) => {
   const categories = new Map();
+  // Build the menu at invocation time so commands registered later during startup are included.
   for (const command of commands.values()) {
     if (!categories.has(command.category)) categories.set(command.category, []);
     categories.get(command.category).push(command);
   }
   const lines = [
-    `╭┈───〔 ꧁༒ ${BOT_NAME} ༒꧂ 〕┈───⊷`,
+    '╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╮',
+    '┃        ✨ GOLDEN BOT SYSTEM ✨       ┃',
     '┃',
-    `├✦ 👑 Owner : ${DISPLAY_OWNER}`,
-    `├✦ ⚡ Commands : ${commands.size}`,
-    `├✦ ⏱️ Runtime : ${formatUptime(Date.now() - STARTED_AT)}`,
-    `├✦ 🔰 Prefix : ${PREFIX}`,
-    `├✦ 🔒 Mode : ${mode.toUpperCase()}`,
-    `├✦ 🩸 Version : ${BOT_VERSION}`,
+    `┃ 👑 ${BOT_NAME} 👑`,
+    '┃       ULTRA LUXURY MENU 💎',
     '┃',
-    '╰━━━━━━━━━━━━━━━━━━⊷',
-    '',
-    '「 THE FINAL BOSS 」',
-    'M.H.E. — Toujours en évolution.',
+    `┃ ✨ Welcome • ${DISPLAY_OWNER} ✨`,
+    `┃ ⏱️ Active : ${formatUptime(Date.now() - STARTED_AT)}`,
+    `┃ 🔢 Version : ${BOT_VERSION}`,
+    `┃ ⚡ Commands : ${commands.size} registered`,
+    `┃ 🔰 Prefix : ${PREFIX}   🔒 Mode : ${mode.toUpperCase()}`,
+    '╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯',
     '',
   ];
   for (const [category, items] of categories) {
-    lines.push(`╭─〔 ${category} 〕`);
-    for (const item of items) lines.push(`│ ${PREFIX}${item.name} — ${item.description}`);
-    lines.push('╰────────────');
+    lines.push(`╭━━━『 👑 ${category} 👑 』━━━◈`);
+    for (const item of items) {
+      lines.push(`┃ ⚡ ${PREFIX}${item.name}  •  ${item.description}`);
+    }
+    lines.push('╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━◈', '');
   }
-  lines.push('', 'Le compteur affiche uniquement les commandes réellement enregistrées.');
-  await sendText(chat, lines.join('\\n'));
+  lines.push(
+    '✨ POWERED BY M.H.E-MD GOLD ✨',
+    'Elite • Gold Edition • Pairing-code connection',
+    'Type ' + PREFIX + 'menu to reopen.',
+    'Le compteur correspond aux commandes réellement enregistrées au démarrage.',
+  );
+  const menuText = lines.join('\n');
+  // Use the connected WhatsApp account's profile photo automatically when available.
+  try {
+    const botJid = socket?.user?.id;
+    if (!botJid) throw new Error('WhatsApp profile is not ready');
+    const profileUrl = await socket.profilePictureUrl(botJid, 'image');
+    if (!profileUrl) throw new Error('No profile picture configured');
+    await socket.sendMessage(chat, { image: { url: profileUrl }, caption: menuText });
+  } catch (error) {
+    logger.info({ err: error }, 'Bot profile photo unavailable; sending text menu');
+    await sendText(chat, menuText);
+  }
 });
 register('help', 'GÉNÉRAL', 'Afficher l’aide', async ({ chat }) => {
   await sendText(chat, `Utilise ${PREFIX}menu pour voir les ${commands.size} commandes actuellement enregistrées.`);
