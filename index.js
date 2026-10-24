@@ -226,6 +226,42 @@ for (const feature of ['welcome', 'goodbye']) {
   });
 }
 
+
+register('uptime', 'GÉNÉRAL', 'Afficher le temps de fonctionnement', async ({ chat }) => {
+  await sendText(chat, `⏱️ ${BOT_NAME} actif depuis ${formatUptime(Date.now() - STARTED_AT)}.`);
+});
+register('botinfo', 'GÉNÉRAL', 'Afficher les informations du bot', async ({ chat }) => {
+  await sendText(chat, [
+    `╭┈──〔 ${BOT_NAME} 〕──┈⊷`,
+    `├✦ Propriétaire : ${DISPLAY_OWNER}`,
+    `├✦ Version : ${BOT_VERSION}`,
+    `├✦ Préfixe : ${PREFIX}`,
+    `├✦ Mode : ${mode.toUpperCase()}`,
+    `├✦ Commandes enregistrées : ${commands.size}`,
+    `├✦ Uptime : ${formatUptime(Date.now() - STARTED_AT)}`,
+    '╰━━━━━━━━━━━━━━⊷',
+  ].join('\\n'));
+});
+register('chatid', 'GÉNÉRAL', 'Afficher l’identifiant du chat', async ({ chat }) => {
+  await sendText(chat, `🆔 ID du chat : ${chat}`);
+});
+register('reverse', 'TEXTE', 'Inverser un texte', async ({ chat, args }) => {
+  const value = args.join(' ');
+  if (!value) throw new Error(`Utilise ${PREFIX}reverse ton texte.`);
+  await sendText(chat, Array.from(value).reverse().join(''));
+});
+register('choose', 'FUN', 'Choisir au hasard parmi des options séparées par |', async ({ chat, args }) => {
+  const choices = args.join(' ').split('|').map((s) => s.trim()).filter(Boolean);
+  if (choices.length < 2) throw new Error(`Utilise ${PREFIX}choose option A | option B.`);
+  await sendText(chat, `🎯 Je choisis : ${choices[Math.floor(Math.random() * choices.length)]}`);
+});
+register('dice', 'FUN', 'Lancer un dé à six faces', async ({ chat }) => {
+  await sendText(chat, `🎲 Résultat : ${1 + Math.floor(Math.random() * 6)}`);
+});
+register('coin', 'FUN', 'Lancer une pièce', async ({ chat }) => {
+  await sendText(chat, `🪙 Résultat : ${Math.random() < 0.5 ? 'Pile' : 'Face'}`);
+});
+
 app.get('/health', (_req, res) => {
   res.json({
     ok: true,
