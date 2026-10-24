@@ -49,7 +49,7 @@ test('AI cannot be enabled when no API key is configured', async () => {
     const { commands, settings } = setup();
     await assert.rejects(
       commands.get('mheai').handler({ chat: 'owner@s.whatsapp.net', args: ['on'] }),
-      /doit être configurée/,
+      /Ajoute MHE_AI_API_KEY ou OPENAI_API_KEY aux variables secrètes/,
     );
     assert.equal(settings.mheai.enabled, false);
   } finally {
