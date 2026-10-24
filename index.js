@@ -178,7 +178,18 @@ register('menu', 'GÉNÉRAL', 'Afficher toutes les commandes enregistrées dans 
     'Type ' + PREFIX + 'menu to reopen.',
     'Le compteur correspond aux commandes réellement enregistrées au démarrage.',
   );
-  await sendText(chat, lines.join('\n'));
+  const menuText = lines.join('\n');
+  // Use the connected WhatsApp account's profile photo automatically when available.
+  try {
+    const botJid = socket?.user?.id;
+    if (!botJid) throw new Error('WhatsApp profile is not ready');
+    const profileUrl = await socket.profilePictureUrl(botJid, 'image');
+    if (!profileUrl) throw new Error('No profile picture configured');
+    await socket.sendMessage(chat, { image: { url: profileUrl }, caption: menuText });
+  } catch (error) {
+    logger.info({ err: error }, 'Bot profile photo unavailable; sending text menu');
+    await sendText(chat, menuText);
+  }
 });
 register('help', 'GÉNÉRAL', 'Afficher l’aide', async ({ chat }) => {
   await sendText(chat, `Utilise ${PREFIX}menu pour voir les ${commands.size} commandes actuellement enregistrées.`);
