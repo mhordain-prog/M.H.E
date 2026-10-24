@@ -379,6 +379,109 @@ for (const alias of MHE_DOWNLOAD_ALIASES) {
   });
 }
 
+
+const MHE_TOOLS_ALIASES = [
+  'mhe-tools', 'remini', 'enhance', 'upscale', 'hd',
+  'removebg', 'removebg2', 'removebg3', 'nobg',
+  'blur', 'unblur', 'deblur',
+  'happy', 'heart', 'angry', 'sad', 'shy', 'moon', 'confused', 'hot', 'nikal',
+  'fancy', 'flag', 'boost', 'hashtag', 'ssweb', 'tourl', 'toimg',
+];
+const MHE_IMAGE_TOOL_COMMANDS = new Set([
+  'remini', 'enhance', 'upscale', 'hd', 'removebg', 'removebg2',
+  'removebg3', 'nobg', 'blur', 'unblur', 'deblur', 'happy',
+  'heart', 'angry', 'sad', 'shy', 'moon', 'confused', 'hot', 'nikal',
+  'tourl', 'toimg',
+]);
+function makeFancyText(value) {
+  const maps = [
+    [0x1d5d4, 0x1d5ee, 0x1d608],
+    [0x1d5a0, 0x1d5ba, 0x1d5d4],
+    [0x1d670, 0x1d68a, 0x1d6a4],
+  ];
+  const convert = (text, baseUpper, baseLower) => [...text].map((ch) => {
+    const code = ch.codePointAt(0);
+    if (code >= 65 && code <= 90) return String.fromCodePoint(baseUpper + code - 65);
+    if (code >= 97 && code <= 122) return String.fromCodePoint(baseLower + code - 97);
+    return ch;
+  }).join('');
+  return [
+    convert(value, maps[0][0], maps[0][1]),
+    convert(value, maps[1][0], maps[1][1]),
+    convert(value, maps[2][0], maps[2][1]),
+    value.toUpperCase(),
+    value.toLowerCase(),
+    [...value].reverse().join(''),
+  ];
+}
+function countryCodeToFlag(value) {
+  const code = value.trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return null;
+  return String.fromCodePoint(...[...code].map((letter) => 127397 + letter.charCodeAt(0)));
+}
+for (const alias of MHE_TOOLS_ALIASES) {
+  register(alias, 'TOOLS GOLD', 'Outils texte et images', async ({ chat, args, message }) => {
+    const value = args.join(' ').trim();
+    if (alias === 'fancy') {
+      if (!value) throw new Error(`Utilise ${PREFIX}fancy Bonjour pour obtenir six styles de texte.`);
+      const styles = makeFancyText(value);
+      await sendText(chat, `╭┈───〔 M.H.E FANCY 〕┈───⊷\\n${styles.join('\\n')}\\n╰───────────────────⊷`);
+      return;
+    }
+    if (alias === 'flag') {
+      const flag = countryCodeToFlag(value);
+      if (!flag) throw new Error(`Utilise un code pays à deux lettres, par exemple ${PREFIX}flag CG.`);
+      await sendText(chat, `Drapeau correspondant au code ${value.toUpperCase()} : ${flag}\\nNote : l'affichage dépend de l'appareil.`);
+      return;
+    }
+    if (alias === 'hashtag') {
+      if (!value) throw new Error(`Utilise ${PREFIX}hashtag un sujet`);
+      const tags = value.normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '')
+        .split(/[^\\p{L}\\p{N}_]+/u).filter(Boolean).slice(0, 20)
+        .map((word) => `#${word}`);
+      await sendText(chat, tags.join(' '));
+      return;
+    }
+    if (alias === 'boost') {
+      if (!value) throw new Error(`Utilise ${PREFIX}boost ton texte`);
+      await sendText(chat, `✨ ${value} ✨\\n\\n— M.H.E-MD`);
+      return;
+    }
+    if (alias === 'ssweb') {
+      if (!value) throw new Error(`Utilise ${PREFIX}ssweb https://example.com`);
+      let parsed;
+      try { parsed = new URL(value.startsWith('http://') || value.startsWith('https://') ? value : `https://${value}`); }
+      catch { throw new Error('URL invalide.'); }
+      if (!['http:', 'https:'].includes(parsed.protocol)
+        || ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname)
+        || parsed.hostname.endsWith('.localhost')
+        || /^10\\./.test(parsed.hostname) || /^192\\.168\\./.test(parsed.hostname)
+        || /^172\\.(1[6-9]|2\\d|3[01])\\./.test(parsed.hostname)) {
+        throw new Error('Cette URL n’est pas autorisée.');
+      }
+      throw new Error('La capture d’écran nécessite un fournisseur de capture configuré. Aucun service fictif n’a été ajouté.');
+    }
+    if (MHE_IMAGE_TOOL_COMMANDS.has(alias)) {
+      const quoted = message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+      const hasImage = Boolean(message.message?.imageMessage || quoted?.imageMessage);
+      if (!hasImage) throw new Error(`Réponds à une image avec ${PREFIX}${alias}.`);
+      throw new Error('Le traitement image n’est pas encore activé : il faut connecter et tester un fournisseur réel avant de modifier ou d’héberger l’image.');
+    }
+    if (alias === 'mhe-tools') {
+      await sendText(chat,
+        '╭┈───〔 M.H.E TOOLS GOLD 〕┈───⊷\\n' +
+        '├ Texte : .fancy, .hashtag, .boost\\n' +
+        '├ Drapeau : .flag CG\\n' +
+        '├ Capture : .ssweb https://example.com (fournisseur requis)\\n' +
+        '├ Images : .remini, .removebg, .blur, .unblur (fournisseur requis)\\n' +
+        '╰───────────────────⊷\\n' +
+        'Les alias sont enregistrés, mais les traitements d’image ne sont pas annoncés comme actifs tant qu’un service réel n’est pas configuré.'
+      );
+      return;
+    }
+  });
+}
+
 app.get('/health', (_req, res) => {
   res.json({
     ok: true,
