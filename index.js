@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import pino from 'pino';
+import { registerMheGoldV2 } from './core/mhe-gold-v2.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import makeWASocket, {
@@ -877,13 +878,14 @@ async function startWhatsApp() {
     for (const message of messages) {
       if (!message.message || message.key.remoteJid === 'status@broadcast') continue;
       const text = messageText(message).trim();
-      if (!text.startsWith(PREFIX)) continue;
-      const [name, ...args] = text.slice(PREFIX.length).trim().split(/\s+/);
-      if (!name) continue;
       const actor = senderJid(message);
       const actorNumber = cleanNumber(actor);
       const blocked = (settings.banned || []).some((item) => cleanNumber(item) === actorNumber);
       if (blocked && !message.key.fromMe) continue;
+      if (await handleMheGoldIncoming(message, { mode })) continue;
+      if (!text.startsWith(PREFIX)) continue;
+      const [name, ...args] = text.slice(PREFIX.length).trim().split(/\s+/);
+      if (!name) continue;
       const connectedOwnerNumber = cleanNumber(socket?.user?.id || '');
       const isOwner = Boolean(message.key.fromMe)
         || (connectedOwnerNumber && actorNumber === connectedOwnerNumber)
@@ -894,6 +896,14 @@ async function startWhatsApp() {
 }
 
 await loadSettings();
+const handleMheGoldIncoming = registerMheGoldV2({
+  register,
+  sendText,
+  settings,
+  saveSettings,
+  getSocket: () => socket,
+  getPrefix: () => PREFIX,
+});
 await startWhatsApp().catch((error) => logger.error({ err: error }, 'WhatsApp startup failed'));
 process.on('SIGTERM', async () => {
   server.close();
