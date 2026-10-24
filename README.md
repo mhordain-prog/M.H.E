@@ -10,6 +10,7 @@ The menu count is calculated from the registered command handlers; it is not a c
 - Text/fun: `.reverse`, `.choose`, `.dice`, `.coin`
 - Fonts: `.font 1 ton texte` et `.font1` à `.font12` (12 transformations Unicode réellement codées)
 - Tools: `.fancy`, `.hashtag`, `.boost`, `.flag` et les alias image `.remini`, `.removebg`, `.blur`, etc. Les transformations texte sont implémentées; les traitements d'image et captures nécessitent encore un fournisseur externe configuré.
+- Group Gold: `.tagall`, `.everyone`, `.hidetag`, `.tag`, `.kick`, `.add`, `.promote`, `.demote`, `.mute`, `.unmute`, `.link`, `.revoke`, `.ginfo`, `.setdesc`, `.setname`, `.poll`, `.requests`, `.acceptall`, `.rejectall`, `.del`, `.out`. Les actions administratives vérifient les droits du membre et ceux du bot; certaines options dépendent des capacités de WhatsApp.
 - Download: `.download`, `.play`, `.video`, `.tiktok`, `.fb`, `.ig`, `.apk`, `.mediafire` et autres alias enregistrés. Les liens directs sont transmis si compatibles; les téléchargements des plateformes sociales nécessitent encore un fournisseur API documenté et ne sont pas annoncés comme fonctionnels.
 - Owner: `.mode private`, `.mode public`
 - Group admin: `.tagall`, `.kick`, `.promote`, `.demote`, `.welcome on/off`, `.goodbye on/off`
