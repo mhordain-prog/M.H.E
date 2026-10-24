@@ -67,7 +67,8 @@ async function synthesizeOriginalVoice(text) {
   const apiKey = process.env.MHE_TTS_API_KEY || process.env.MHE_AI_API_KEY || process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error('Configure MHE_TTS_API_KEY (ou OPENAI_API_KEY) dans les variables secrètes de l’hébergement.');
   const endpoint = (process.env.MHE_TTS_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
-  const model = process.env.MHE_TTS_MODEL || 'gpt-4o-mini-tts';
+  const model = process.env.MHE_TTS_MODEL;
+  if (!model) throw new Error('Configure MHE_TTS_MODEL avec un modèle de synthèse vocale encore pris en charge. Aucun modèle en fin de vie n’est choisi automatiquement.');
   const voice = process.env.MHE_TTS_VOICE || 'coral';
   const response = await fetch(`${endpoint}/audio/speech`, {
     method: 'POST',
