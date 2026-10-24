@@ -154,21 +154,21 @@ register('menu', 'GÉNÉRAL', 'Afficher toutes les commandes enregistrées dans 
     '╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╮',
     '┃        ✨ GOLDEN BOT SYSTEM ✨       ┃',
     '┃',
-    \`┃ 👑 \${BOT_NAME} 👑\`,
+    `┃ 👑 ${BOT_NAME} 👑`,
     '┃       ULTRA LUXURY MENU 💎',
     '┃',
-    \`┃ ✨ Welcome • \${DISPLAY_OWNER} ✨\`,
-    \`┃ ⏱️ Active : \${formatUptime(Date.now() - STARTED_AT)}\`,
-    \`┃ 🔢 Version : \${BOT_VERSION}\`,
-    \`┃ ⚡ Commands : \${commands.size} registered\`,
-    \`┃ 🔰 Prefix : \${PREFIX}   🔒 Mode : \${mode.toUpperCase()}\`,
+    `┃ ✨ Welcome • ${DISPLAY_OWNER} ✨`,
+    `┃ ⏱️ Active : ${formatUptime(Date.now() - STARTED_AT)}`,
+    `┃ 🔢 Version : ${BOT_VERSION}`,
+    `┃ ⚡ Commands : ${commands.size} registered`,
+    `┃ 🔰 Prefix : ${PREFIX}   🔒 Mode : ${mode.toUpperCase()}`,
     '╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯',
     '',
   ];
   for (const [category, items] of categories) {
-    lines.push(\`╭━━━『 👑 \${category} 👑 』━━━◈\`);
+    lines.push(`╭━━━『 👑 ${category} 👑 』━━━◈`);
     for (const item of items) {
-      lines.push(\`┃ ⚡ \${PREFIX}\${item.name}  •  \${item.description}\`);
+      lines.push(`┃ ⚡ ${PREFIX}${item.name}  •  ${item.description}`);
     }
     lines.push('╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━◈', '');
   }
