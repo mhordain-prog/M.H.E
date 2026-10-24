@@ -451,7 +451,7 @@ register('delsudo', 'PROPRIÉTAIRE', 'Retirer un numéro SUDO', async ({ chat, a
 }, true);
 register('listsudo', 'PROPRIÉTAIRE', 'Lister les numéros SUDO', async ({ chat, isOwner }) => {
   requireOwner(isOwner);
-  await sendText(chat, (settings.sudo || []).length ? `SUDO :\\n${settings.sudo.join('\\n')}` : 'Aucun SUDO configuré.');
+  await sendText(chat, (settings.sudo || []).length ? `SUDO :\n${settings.sudo.join('\n')}` : 'Aucun SUDO configuré.');
 }, true);
 register('ban', 'PROPRIÉTAIRE', 'Bloquer un utilisateur du bot', async ({ chat, message, args, isOwner }) => {
   requireOwner(isOwner);
@@ -477,7 +477,7 @@ register('unban', 'PROPRIÉTAIRE', 'Débloquer un utilisateur du bot', async ({ 
 register('banlist', 'PROPRIÉTAIRE', 'Afficher les utilisateurs bloqués', async ({ chat, isOwner }) => {
   requireOwner(isOwner);
   const list = settings.banned || [];
-  await sendText(chat, list.length ? `Utilisateurs bloqués : ${list.length}\\n${list.join('\\n')}` : 'Aucun utilisateur bloqué.');
+  await sendText(chat, list.length ? `Utilisateurs bloqués : ${list.length}\n${list.join('\n')}` : 'Aucun utilisateur bloqué.');
 }, true);
 for (const alias of ['welcome', 'goodbye']) {
   register(alias, 'PROPRIÉTAIRE', 'Activer ou désactiver les messages de bienvenue/départ', async ({ chat, args, isOwner }) => {
@@ -512,7 +512,7 @@ for (const alias of ['antilink','antidelete','antitag','antistatusmention','anti
 register('settings', 'PROPRIÉTAIRE', 'Afficher les réglages enregistrés', async ({ chat, isOwner }) => {
   requireOwner(isOwner);
   const safe = { ...settings, sudo: settings.sudo || [], banned: settings.banned || [] };
-  await sendText(chat, `╭┈───〔 M.H.E OWNER GOLD 〕┈───⊷\\nMode : ${mode}\\nPréfixe : ${PREFIX}\\nBot : ${BOT_NAME}\\nPropriétaire affiché : ${DISPLAY_OWNER}\\nSUDO : ${safe.sudo.length}\\nBannis : ${safe.banned.length}\\nBienvenue : ${safe.welcome ? 'ON' : 'OFF'}\\nAu revoir : ${safe.goodbye ? 'ON' : 'OFF'}\\nAntilink : ${safe.antilink ? 'ON' : 'OFF'}\\n╰───────────────────⊷`);
+  await sendText(chat, `╭┈───〔 M.H.E OWNER GOLD 〕┈───⊷\nMode : ${mode}\nPréfixe : ${PREFIX}\nBot : ${BOT_NAME}\nPropriétaire affiché : ${DISPLAY_OWNER}\nSUDO : ${safe.sudo.length}\nBannis : ${safe.banned.length}\nBienvenue : ${safe.welcome ? 'ON' : 'OFF'}\nAu revoir : ${safe.goodbye ? 'ON' : 'OFF'}\nAntilink : ${safe.antilink ? 'ON' : 'OFF'}\n╰───────────────────⊷`);
 }, true);
 register('mhe-owner', 'PROPRIÉTAIRE', 'Afficher l’aide OWNER GOLD', async ({ chat, isOwner }) => {
   requireOwner(isOwner);
@@ -530,7 +530,7 @@ register('mhe-owner', 'PROPRIÉTAIRE', 'Afficher l’aide OWNER GOLD', async ({ 
     '├ .settings',
     '╰───────────────────⊷',
     'Les réglages sans intégration dans le gestionnaire ne changent pas encore automatiquement le comportement du bot.',
-  ].join('\\n'));
+  ].join('\n'));
 }, true);
 
 register('uptime', 'GÉNÉRAL', 'Afficher le temps de fonctionnement', async ({ chat }) => {
@@ -882,6 +882,8 @@ async function startWhatsApp() {
       if (!name) continue;
       const actor = senderJid(message);
       const actorNumber = cleanNumber(actor);
+      const blocked = (settings.banned || []).some((item) => cleanNumber(item) === actorNumber);
+      if (blocked && !message.key.fromMe) continue;
       const connectedOwnerNumber = cleanNumber(socket?.user?.id || '');
       const isOwner = Boolean(message.key.fromMe)
         || (connectedOwnerNumber && actorNumber === connectedOwnerNumber)
