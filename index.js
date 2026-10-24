@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import pino from 'pino';
 import { registerMheGoldV2 } from './core/mhe-gold-v2.js';
+import { registerAnimeQuiz, handleAnimeQuizIncoming } from './core/anime-quiz.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import makeWASocket, {
@@ -882,6 +883,7 @@ async function startWhatsApp() {
       const actorNumber = cleanNumber(actor);
       const blocked = (settings.banned || []).some((item) => cleanNumber(item) === actorNumber);
       if (blocked && !message.key.fromMe) continue;
+      if (await handleAnimeQuizIncoming(message, { sendText, getPrefix: () => PREFIX })) continue;
       if (await handleMheGoldIncoming(message, { mode })) continue;
       if (!text.startsWith(PREFIX)) continue;
       const [name, ...args] = text.slice(PREFIX.length).trim().split(/\s+/);
@@ -896,6 +898,7 @@ async function startWhatsApp() {
 }
 
 await loadSettings();
+registerAnimeQuiz({ register, sendText, getPrefix: () => PREFIX });
 const handleMheGoldIncoming = registerMheGoldV2({
   register,
   sendText,
