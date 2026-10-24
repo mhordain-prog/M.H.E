@@ -227,6 +227,171 @@ for (const feature of ['welcome', 'goodbye']) {
 }
 
 
+
+const MHE_GROUP_GOLD_ALIASES = [
+  'mhe-group', 'everyone', 'hidetag', 'tag',
+  'add', 'mute', 'unmute', 'link', 'revoke', 'ginfo', 'gcinfo', 'gcstatus',
+  'updategdesc', 'setdesc', 'updategname', 'setname', 'poll', 'requests',
+  'acceptall', 'rejectall', 'del', 'delete', 'out', 'leave',
+];
+register('everyone', 'GROUPES', 'Mentionner tous les membres', async ({ chat, actor, args }) => {
+  requireGroup(chat);
+  const context = await groupContext(chat, actor);
+  requireAdmin(context);
+  const mentions = context.participants.map((p) => p.id).filter(Boolean);
+  const body = args.join(' ') || 'Mention générale';
+  await sendText(chat, `📣 ${body}\n\n${mentions.map((jid) => `• @${cleanNumber(jid)}`).join('\n')}`, { mentions });
+});
+register('hidetag', 'GROUPES', 'Mention invisible des membres', async ({ chat, actor, args }) => {
+  requireGroup(chat);
+  const context = await groupContext(chat, actor);
+  requireAdmin(context);
+  const mentions = context.participants.map((p) => p.id).filter(Boolean);
+  await sendText(chat, args.join(' ') || 'M.H.E', { mentions });
+});
+register('tag', 'GROUPES', 'Mentionner les membres du groupe', async ({ chat, actor, args }) => {
+  requireGroup(chat);
+  const context = await groupContext(chat, actor);
+  requireAdmin(context);
+  const mentions = context.participants.map((p) => p.id).filter(Boolean);
+  await sendText(chat, args.join(' ') || 'Membres du groupe', { mentions });
+});
+register('add', 'GROUPES', 'Ajouter un membre par numéro', async ({ chat, actor, args }) => {
+  requireGroup(chat);
+  const context = await groupContext(chat, actor);
+  requireAdmin(context);
+  const number = (args[0] || '').replace(/\D/g, '');
+  if (number.length < 7 || number.length > 15) throw new Error(`Utilise ${PREFIX}add numéro_international`);
+  await socket.groupParticipantsUpdate(chat, [`${number}@s.whatsapp.net`], 'add');
+  await sendText(chat, '📨 Demande d’ajout transmise à WhatsApp. Le résultat dépend des paramètres et restrictions du groupe.');
+});
+for (const action of ['mute', 'unmute']) {
+  register(action, 'GROUPES', action === 'mute' ? 'Fermer le groupe aux membres' : 'Ouvrir le groupe aux membres', async ({ chat, actor }) => {
+    requireGroup(chat);
+    const context = await groupContext(chat, actor);
+    requireAdmin(context);
+    await socket.groupSettingUpdate(chat, action === 'mute' ? 'announcement' : 'not_announcement');
+    await sendText(chat, action === 'mute' ? '🔒 Le groupe est maintenant réservé aux administrateurs pour envoyer des messages.' : '🔓 Les membres peuvent de nouveau envoyer des messages.');
+  });
+}
+register('link', 'GROUPES', 'Afficher le lien d’invitation du groupe', async ({ chat, actor }) => {
+  requireGroup(chat);
+  const context = await groupContext(chat, actor);
+  requireAdmin(context);
+  const code = await socket.groupInviteCode(chat);
+  await sendText(chat, `🔗 Lien du groupe : https://chat.whatsapp.com/${code}`);
+});
+register('revoke', 'GROUPES', 'Révoquer le lien d’invitation', async ({ chat, actor }) => {
+  requireGroup(chat);
+  const context = await groupContext(chat, actor);
+  requireAdmin(context);
+  await socket.groupRevokeInvite(chat);
+  const code = await socket.groupInviteCode(chat);
+  await sendText(chat, `✅ Ancien lien révoqué. Nouveau lien : https://chat.whatsapp.com/${code}`);
+});
+for (const alias of ['ginfo', 'gcinfo', 'gcstatus']) {
+  register(alias, 'GROUPES', 'Afficher les informations du groupe', async ({ chat }) => {
+    requireGroup(chat);
+    const meta = await socket.groupMetadata(chat);
+    const admins = (meta.participants || []).filter((p) => p.admin || p.isAdmin || p.isSuperAdmin).length;
+    const created = meta.creation ? new Date(meta.creation * 1000).toLocaleDateString('fr-FR') : 'inconnue';
+    await sendText(chat, [
+      '╭┈───〔 M.H.E GROUP INFO 〕┈───⊷',
+      `├ Nom : ${meta.subject || 'inconnu'}`,
+      `├ ID : ${meta.id}`,
+      `├ Membres : ${meta.participants?.length || 0}`,
+      `├ Administrateurs : ${admins}`,
+      `├ Création : ${created}`,
+      `╰ Description : ${meta.desc || 'Aucune'}`,
+    ].join('\n'));
+  });
+}
+for (const [alias, operation] of [['updategdesc', 'description'], ['setdesc', 'description'], ['updategname', 'name'], ['setname', 'name']]) {
+  register(alias, 'GROUPES', operation === 'description' ? 'Modifier la description du groupe' : 'Modifier le nom du groupe', async ({ chat, actor, args }) => {
+    requireGroup(chat);
+    const context = await groupContext(chat, actor);
+    requireAdmin(context);
+    const value = args.join(' ').trim();
+    if (!value) throw new Error(operation === 'description' ? `Utilise ${PREFIX}${alias} nouvelle description` : `Utilise ${PREFIX}${alias} nouveau nom`);
+    if (operation === 'description') await socket.groupUpdateDescription(chat, value);
+    else await socket.groupUpdateSubject(chat, value);
+    await sendText(chat, operation === 'description' ? '✅ Description du groupe mise à jour.' : '✅ Nom du groupe mis à jour.');
+  });
+}
+register('poll', 'GROUPES', 'Créer un sondage : question | option 1 | option 2', async ({ chat, args }) => {
+  requireGroup(chat);
+  const [question, ...options] = args.join(' ').split('|').map((part) => part.trim()).filter(Boolean);
+  if (!question || options.length < 2) throw new Error(`Utilise ${PREFIX}poll Question | Option 1 | Option 2`);
+  if (options.length > 12) throw new Error('WhatsApp limite le sondage à 12 options.');
+  await socket.sendMessage(chat, { poll: { name: question, values: options, selectableCount: 1 } });
+});
+register('requests', 'GROUPES', 'Lister les demandes d’adhésion en attente', async ({ chat, actor }) => {
+  requireGroup(chat);
+  const context = await groupContext(chat, actor);
+  requireAdmin(context);
+  const requests = await socket.groupRequestParticipantsList(chat);
+  await sendText(chat, requests.length
+    ? `Demandes en attente : ${requests.length}\n${requests.map((r, i) => `${i + 1}. ${r.jid}`).join('\n')}`
+    : 'Aucune demande d’adhésion en attente.');
+});
+for (const action of ['acceptall', 'rejectall']) {
+  register(action, 'GROUPES', action === 'acceptall' ? 'Accepter les demandes d’adhésion' : 'Refuser les demandes d’adhésion', async ({ chat, actor }) => {
+    requireGroup(chat);
+    const context = await groupContext(chat, actor);
+    requireAdmin(context);
+    const requests = await socket.groupRequestParticipantsList(chat);
+    let completed = 0;
+    for (const request of requests) {
+      try {
+        await socket.groupRequestParticipantsUpdate(chat, [request.jid], action === 'acceptall' ? 'approve' : 'reject');
+        completed += 1;
+      } catch (error) {
+        logger.warn({ err: error, group: chat }, 'Could not process group join request');
+      }
+    }
+    await sendText(chat, `Traitement terminé : ${completed}/${requests.length} demande(s) ${action === 'acceptall' ? 'acceptée(s)' : 'refusée(s)}.`);
+  });
+}
+for (const alias of ['del', 'delete']) {
+  register(alias, 'GROUPES', 'Supprimer un message envoyé par M.H.E en répondant dessus', async ({ chat, message }) => {
+    requireGroup(chat);
+    const contextInfo = message.message?.extendedTextMessage?.contextInfo;
+    const quotedMessage = contextInfo?.quotedMessage;
+    const stanzaId = contextInfo?.stanzaId;
+    if (!quotedMessage || !stanzaId) throw new Error('Réponds à un message envoyé par M.H.E.');
+    const participant = contextInfo.participant || '';
+    const botNumber = cleanNumber(socket.user?.id || '');
+    if (!contextInfo.fromMe && cleanNumber(participant) !== botNumber) {
+      throw new Error('Par sécurité, cette commande ne supprime que les messages du bot.');
+    }
+    await socket.sendMessage(chat, {
+      delete: { remoteJid: chat, fromMe: true, id: stanzaId, participant: participant || undefined },
+    });
+  });
+}
+for (const alias of ['out', 'leave']) {
+  register(alias, 'GROUPES', 'Faire quitter le groupe par le bot', async ({ chat, isOwner }) => {
+    requireGroup(chat);
+    if (!isOwner) throw new Error('Seul le propriétaire du bot peut lui faire quitter un groupe.');
+    await socket.groupLeave(chat);
+  });
+}
+register('mhe-group', 'GROUPES', 'Afficher l’aide GROUP GOLD', async ({ chat }) => {
+  await sendText(chat, [
+    '╭┈───〔 M.H.E GROUP GOLD 〕┈───⊷',
+    '├ Mentions : .tagall, .everyone, .hidetag, .tag',
+    '├ Membres : .add, .kick, .promote, .demote',
+    '├ Réglages : .mute, .unmute, .link, .revoke',
+    '├ Infos : .ginfo, .gcinfo, .gcstatus',
+    '├ Groupe : .setdesc, .setname, .poll',
+    '├ Demandes : .requests, .acceptall, .rejectall',
+    '├ Modération : .del (message du bot seulement)',
+    '├ Propriétaire : .out, .leave',
+    '╰───────────────────⊷',
+    'Les commandes .newgc, .join, .invite, .gcpp, .chreact et les fonctions non listées ne sont pas activées dans ce pack.',
+  ].join('\n'));
+});
+
 register('uptime', 'GÉNÉRAL', 'Afficher le temps de fonctionnement', async ({ chat }) => {
   await sendText(chat, `⏱️ ${BOT_NAME} actif depuis ${formatUptime(Date.now() - STARTED_AT)}.`);
 });
