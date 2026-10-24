@@ -8,6 +8,7 @@ The menu count is calculated from the registered command handlers; it is not a c
 
 - General: `.menu`, `.help`, `.ping`, `.alive`, `.owner`, `.uptime`, `.botinfo`, `.chatid`
 - Text/fun: `.reverse`, `.choose`, `.dice`, `.coin`
+- Fonts: `.font 1 ton texte` et `.font1` à `.font12` (12 transformations Unicode réellement codées)
 - Owner: `.mode private`, `.mode public`
 - Group admin: `.tagall`, `.kick`, `.promote`, `.demote`, `.welcome on/off`, `.goodbye on/off`
 
