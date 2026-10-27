@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import yts from 'yt-search';
 import express from 'express';
 import pino from 'pino';
 import { registerMheGoldV2 } from './core/mhe-gold-v2.js';
@@ -665,20 +666,10 @@ function isDirectDownloadUrl(input) {
   } catch { return false; }
 }
 async function youtubeSearch(query) {
-  const response = await fetch('https://www.youtube.com/results?search_query=' + encodeURIComponent(query), {
-    headers: { 'user-agent': 'Mozilla/5.0 (compatible; MHE-GOLD/1.0)' },
-    signal: AbortSignal.timeout(12000),
-  });
-  if (!response.ok) throw new Error('La recherche YouTube est temporairement indisponible.');
-  const html = await response.text();
-  const ids = [...html.matchAll(/"videoId":"([A-Za-z0-9_-]{11})"/g)].map((m) => m[1]);
-  const uniqueIds = [...new Set(ids)];
-  if (!uniqueIds.length) return null;
-  const id = uniqueIds[0];
-  const titleMatch = html.match(new RegExp('"videoId":"' + id + '"[\\s\\S]{0,1200}?"title":\\{"runs":\\[\\{"text":"([^"]+)"'));
-  let title = titleMatch?.[1] || 'Vidéo YouTube';
-  try { title = JSON.parse('"' + title.replace(/\\/g, '\\\\').replace(/"/g, '\\\"') + '"'); } catch {}
-  return { id, title: title.replace(/&amp;/g, '&'), url: 'https://www.youtube.com/watch?v=' + id };
+  const result = await yts(query);
+  const first = result?.videos?.[0];
+  if (!first?.url) return null;
+  return { id: first.videoId, title: first.title || 'Vidéo YouTube', url: first.url };
 }
 async function youtubeDownload(url, kind) {
   const base = process.env.YT_DOWNLOAD_API_URL;
