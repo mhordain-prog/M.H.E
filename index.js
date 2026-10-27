@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import yts from 'yt-search';
 import express from 'express';
 import pino from 'pino';
 import { registerMheGoldV2 } from './core/mhe-gold-v2.js';
@@ -43,7 +44,7 @@ let authState;
 let saveCreds;
 let reconnectTimer;
 let mode = process.env.BOT_MODE === 'public' ? 'public' : 'private';
-let settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true };
+let settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true, autoreact: true };
 let pairCooldownUntil = 0;
 const pairIpCooldowns = new Map();
 const PAIR_COOLDOWN_MS = 45_000;
@@ -52,7 +53,7 @@ const commands = new Map();
 async function loadSettings() {
   try {
     const parsed = JSON.parse(await fs.readFile(SETTINGS_FILE, 'utf8'));
-    settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true, ...parsed, groups: parsed.groups || {} };
+    settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true, autoreact: true, ...parsed, groups: parsed.groups || {} };
     if (parsed.mode === 'public' || parsed.mode === 'private') mode = parsed.mode;
     if (typeof parsed.prefix === 'string' && parsed.prefix.length > 0 && parsed.prefix.length <= 3) PREFIX = parsed.prefix;
     if (typeof parsed.botname === 'string' && parsed.botname.trim()) BOT_NAME = parsed.botname;
@@ -531,7 +532,7 @@ for (const alias of ['antilink','antidelete','antitag','antistatusmention','anti
 register('settings', 'PROPRIÉTAIRE', 'Afficher les réglages enregistrés', async ({ chat, isOwner }) => {
   requireOwner(isOwner);
   const safe = { ...settings, sudo: settings.sudo || [], banned: settings.banned || [] };
-  await sendText(chat, `╭┈───〔 M.H.E OWNER GOLD 〕┈───⊷\nMode : ${mode}\nPréfixe : ${PREFIX}\nBot : ${BOT_NAME}\nPropriétaire affiché : ${DISPLAY_OWNER}\nSUDO : ${safe.sudo.length}\nBannis : ${safe.banned.length}\nBienvenue : ${safe.welcome ? 'ON' : 'OFF'}\nAu revoir : ${safe.goodbye ? 'ON' : 'OFF'}\nAntilink : ${safe.antilink ? 'ON' : 'OFF'}\n╰───────────────────⊷`);
+  await sendText(chat, `╭┈───〔 M.H.E OWNER GOLD 〕┈───⊷\nMode : ${mode}\nPréfixe : ${PREFIX}\nBot : ${BOT_NAME}\nPropriétaire affiché : ${DISPLAY_OWNER}\nSUDO : ${safe.sudo.length}\nBannis : ${safe.banned.length}\nBienvenue : ${safe.welcome ? 'ON' : 'OFF'}\nAu revoir : ${safe.goodbye ? 'ON' : 'OFF'}\nAntilink : ${safe.antilink ? 'ON' : 'OFF'}\nRéaction auto : ${safe.autoreact ? 'ON' : 'OFF'}\n╰───────────────────⊷`);
 }, true);
 register('mhe-owner', 'PROPRIÉTAIRE', 'Afficher l’aide OWNER GOLD', async ({ chat, isOwner }) => {
   requireOwner(isOwner);
@@ -646,16 +647,16 @@ function identifyDownloadTarget(input) {
   const host = parsed.hostname.toLowerCase();
   if (host === 'localhost' || host.endsWith('.localhost') || host === '127.0.0.1' || host === '::1'
     || /^10\\./.test(host) || /^192\\.168\\./.test(host) || /^172\\.(1[6-9]|2\\d|3[01])\\./.test(host)) return null;
-  if (/youtube\\.com$|youtu\\.be$/.test(host)) return 'YouTube';
-  if (/tiktok\\.com$/.test(host)) return 'TikTok';
-  if (/facebook\\.com$|fb\\.watch$/.test(host)) return 'Facebook';
-  if (/instagram\\.com$/.test(host)) return 'Instagram';
-  if (/twitter\\.com$|x\\.com$/.test(host)) return 'X / Twitter';
-  if (/mediafire\\.com$/.test(host)) return 'MediaFire';
-  if (/drive\\.google\\.com$/.test(host)) return 'Google Drive';
-  if (/mega\\.nz$/.test(host)) return 'MEGA';
-  if (/pinterest\\.com$/.test(host)) return 'Pinterest';
-  if (/capcut\\.com$/.test(host)) return 'CapCut';
+  if (/(^|\\.)youtube\\.com$|(^|\\.)youtu\\.be$/.test(host)) return 'YouTube';
+  if (/(^|\\.)tiktok\\.com$/.test(host)) return 'TikTok';
+  if (/(^|\\.)facebook\\.com$|(^|\\.)fb\\.watch$/.test(host)) return 'Facebook';
+  if (/(^|\\.)instagram\\.com$/.test(host)) return 'Instagram';
+  if (/(^|\\.)twitter\\.com$|(^|\\.)x\\.com$/.test(host)) return 'X / Twitter';
+  if (/(^|\\.)mediafire\\.com$/.test(host)) return 'MediaFire';
+  if (/(^|\\.)drive\\.google\\.com$/.test(host)) return 'Google Drive';
+  if (/(^|\\.)mega\\.nz$/.test(host)) return 'MEGA';
+  if (/(^|\\.)pinterest\\.com$/.test(host)) return 'Pinterest';
+  if (/(^|\\.)capcut\\.com$/.test(host)) return 'CapCut';
   return 'Lien direct';
 }
 function isDirectDownloadUrl(input) {
@@ -664,18 +665,62 @@ function isDirectDownloadUrl(input) {
     return /\\.(mp3|m4a|ogg|wav|mp4|webm|mov|jpg|jpeg|png|webp|gif|pdf|zip|apk)$/i.test(parsed.pathname);
   } catch { return false; }
 }
+async function youtubeSearch(query) {
+  const result = await yts(query);
+  const first = result?.videos?.[0];
+  if (!first?.url) return null;
+  return { id: first.videoId, title: first.title || 'Vidéo YouTube', url: first.url };
+}
+async function youtubeDownload(url, kind) {
+  const base = process.env.YT_DOWNLOAD_API_URL;
+  if (!base) throw new Error('Le fournisseur de téléchargement n’est pas configuré. Définis YT_DOWNLOAD_API_URL avec une API documentée compatible.');
+  const endpoint = new URL(base);
+  endpoint.searchParams.set('url', url);
+  endpoint.searchParams.set('type', kind);
+  const response = await fetch(endpoint, { signal: AbortSignal.timeout(45000) });
+  if (!response.ok) throw new Error('Le fournisseur YouTube a répondu avec une erreur HTTP ' + response.status + '.');
+  const data = await response.json();
+  const candidate = data?.result?.download?.url || data?.result?.url || data?.download?.url || data?.url;
+  if (typeof candidate !== 'string') throw new Error('Réponse du fournisseur invalide : URL de téléchargement absente.');
+  const mediaUrl = new URL(candidate);
+  if (!['http:', 'https:'].includes(mediaUrl.protocol)) throw new Error('Le fournisseur a retourné une URL non autorisée.');
+  return { url: mediaUrl.href, title: String(data?.result?.title || data?.title || '') };
+}
 for (const alias of MHE_DOWNLOAD_ALIASES) {
-  register(alias, 'TÉLÉCHARGEMENT', 'Détecter la plateforme ou traiter un lien direct', async ({ chat, args }) => {
+  register(alias, 'TÉLÉCHARGEMENT', 'Rechercher YouTube ou détecter une plateforme', async ({ chat, args }) => {
     const input = args.join(' ').trim();
     if (!input) {
       await sendText(chat,
         '╭┈───〔 M.H.E DOWNLOAD 〕┈───⊷\\n' +
-        '├ .download <lien> — détecter une plateforme\\n' +
-        '├ .play <recherche> — nécessite un fournisseur YouTube configuré\\n' +
-        '├ .video <recherche> — nécessite un fournisseur YouTube configuré\\n' +
+        '├ .play <recherche ou lien YouTube> — audio MP3\\n' +
+        '├ .video <recherche ou lien YouTube> — vidéo MP4\\n' +
+        '├ .download <lien direct> — document média\\n' +
         '╰───────────────────⊷\\n\\n' +
-        'Les téléchargements sociaux nécessitent une API réelle configurée. Les alias sont enregistrés, mais cela ne signifie pas que chaque plateforme est déjà prise en charge.'
+        'Les autres plateformes nécessitent un fournisseur compatible configuré.'
       );
+      return;
+    }
+    if (alias === 'play' || alias === 'song' || alias === 'ytmp3' || alias === 'video' || alias === 'ytmp4') {
+      const kind = ['video', 'ytmp4'].includes(alias) ? 'video' : 'audio';
+      let target = input;
+      if (!/^https?:\\/\\//i.test(input)) {
+        const result = await youtubeSearch(input);
+        if (!result) throw new Error('Aucun résultat YouTube trouvé. Essaie une recherche plus précise.');
+        target = result.url;
+      }
+      let parsed;
+      try { parsed = new URL(target); } catch { throw new Error('Recherche ou lien YouTube invalide.'); }
+      if (!/(^|\\.)youtube\\.com$|(^|\\.)youtu\\.be$/.test(parsed.hostname.toLowerCase())) {
+        throw new Error('Pour cette commande, fournis une recherche ou un lien YouTube valide.');
+      }
+      await sendText(chat, (kind === 'audio' ? '🎧 Préparation audio : ' : '🎬 Préparation vidéo : ') + target);
+      const media = await youtubeDownload(target, kind);
+      const title = media.title || (kind === 'audio' ? 'MHE-audio' : 'MHE-video');
+      if (kind === 'audio') {
+        await socket.sendMessage(chat, { audio: { url: media.url }, mimetype: 'audio/mpeg', fileName: title.slice(0, 120) + '.mp3' });
+      } else {
+        await socket.sendMessage(chat, { video: { url: media.url }, caption: title.slice(0, 900) });
+      }
       return;
     }
     const platform = identifyDownloadTarget(input);
@@ -689,18 +734,15 @@ for (const alias of MHE_DOWNLOAD_ALIASES) {
         gif: 'image/gif', pdf: 'application/pdf', zip: 'application/zip',
         apk: 'application/vnd.android.package-archive',
       };
-      await sendText(chat, '⬇️ Lien direct détecté. Je transmets le fichier si WhatsApp peut le récupérer depuis cette URL.');
       await socket.sendMessage(chat, {
         document: { url: input },
         mimetype: mimeByExt[ext] || 'application/octet-stream',
-        fileName: decodeURIComponent(new URL(input).pathname.split('/').pop() || `download.${ext}`),
-        caption: 'M.H.E-MD — lien direct',
+        fileName: decodeURIComponent(new URL(input).pathname.split('/').pop() || ('download.' + ext)),
+        caption: 'M.H.E-MD GOLD — lien direct',
       });
       return;
     }
-    throw new Error(
-      `${platform} détecté, mais aucun fournisseur de téléchargement fiable n'est configuré pour cette plateforme. Aucun faux lien API n'a été ajouté. Configure une API documentée avant d'activer ce téléchargement.`
-    );
+    throw new Error(platform + ' détecté, mais aucun fournisseur compatible n’est configuré pour cette plateforme.');
   });
 }
 
@@ -926,7 +968,17 @@ async function startWhatsApp() {
       const isOwner = Boolean(message.key.fromMe)
         || (connectedOwnerNumber && actorNumber === connectedOwnerNumber)
         || OWNER_NUMBERS.has(actorNumber);
-      await executeCommand(message, name.toLowerCase(), args, isOwner);
+      const commandName = name.toLowerCase();
+      if (settings.autoreact !== false && commands.has(commandName)) {
+        try {
+          await socket.sendMessage(message.key.remoteJid, {
+            react: { text: '⚡', key: message.key },
+          });
+        } catch (error) {
+          logger.debug({ err: error, command: commandName }, 'Automatic command reaction failed');
+        }
+      }
+      await executeCommand(message, commandName, args, isOwner);
     }
   });
 }
