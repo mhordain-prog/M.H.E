@@ -872,7 +872,20 @@ async function startWhatsApp() {
       if (statusCode !== DisconnectReason.loggedOut) {
         reconnectTimer = setTimeout(() => startWhatsApp().catch((err) => logger.error({ err }, 'Reconnect failed')), 3000);
       } else {
-        logger.error('WhatsApp session logged out. Remove the session only if you intend to pair again.');
+        // WhatsApp invalidated this login. Reset only this bot's auth files
+        // so the pairing page can create a fresh login.
+        logger.warn('WhatsApp session logged out; clearing invalid auth files to allow a new pairing.');
+        (async () => {
+          try {
+            await fs.rm(SESSION_DIR, { recursive: true, force: true });
+            await fs.mkdir(SESSION_DIR, { recursive: true });
+            authState = undefined;
+            saveCreds = undefined;
+            reconnectTimer = setTimeout(() => startWhatsApp().catch((err) => logger.error({ err }, 'WhatsApp restart after logout failed')), 1500);
+          } catch (err) {
+            logger.error({ err }, 'Could not reset logged-out WhatsApp auth state');
+          }
+        })();
       }
     }
   });
