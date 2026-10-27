@@ -44,7 +44,7 @@ let authState;
 let saveCreds;
 let reconnectTimer;
 let mode = process.env.BOT_MODE === 'public' ? 'public' : 'private';
-let settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true };
+let settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true, autoreact: true };
 let pairCooldownUntil = 0;
 const pairIpCooldowns = new Map();
 const PAIR_COOLDOWN_MS = 45_000;
@@ -53,7 +53,7 @@ const commands = new Map();
 async function loadSettings() {
   try {
     const parsed = JSON.parse(await fs.readFile(SETTINGS_FILE, 'utf8'));
-    settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true, ...parsed, groups: parsed.groups || {} };
+    settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true, autoreact: true, ...parsed, groups: parsed.groups || {} };
     if (parsed.mode === 'public' || parsed.mode === 'private') mode = parsed.mode;
     if (typeof parsed.prefix === 'string' && parsed.prefix.length > 0 && parsed.prefix.length <= 3) PREFIX = parsed.prefix;
     if (typeof parsed.botname === 'string' && parsed.botname.trim()) BOT_NAME = parsed.botname;
@@ -532,7 +532,7 @@ for (const alias of ['antilink','antidelete','antitag','antistatusmention','anti
 register('settings', 'PROPRIÉTAIRE', 'Afficher les réglages enregistrés', async ({ chat, isOwner }) => {
   requireOwner(isOwner);
   const safe = { ...settings, sudo: settings.sudo || [], banned: settings.banned || [] };
-  await sendText(chat, `╭┈───〔 M.H.E OWNER GOLD 〕┈───⊷\nMode : ${mode}\nPréfixe : ${PREFIX}\nBot : ${BOT_NAME}\nPropriétaire affiché : ${DISPLAY_OWNER}\nSUDO : ${safe.sudo.length}\nBannis : ${safe.banned.length}\nBienvenue : ${safe.welcome ? 'ON' : 'OFF'}\nAu revoir : ${safe.goodbye ? 'ON' : 'OFF'}\nAntilink : ${safe.antilink ? 'ON' : 'OFF'}\n╰───────────────────⊷`);
+  await sendText(chat, `╭┈───〔 M.H.E OWNER GOLD 〕┈───⊷\nMode : ${mode}\nPréfixe : ${PREFIX}\nBot : ${BOT_NAME}\nPropriétaire affiché : ${DISPLAY_OWNER}\nSUDO : ${safe.sudo.length}\nBannis : ${safe.banned.length}\nBienvenue : ${safe.welcome ? 'ON' : 'OFF'}\nAu revoir : ${safe.goodbye ? 'ON' : 'OFF'}\nAntilink : ${safe.antilink ? 'ON' : 'OFF'}\nRéaction auto : ${safe.autoreact ? 'ON' : 'OFF'}\n╰───────────────────⊷`);
 }, true);
 register('mhe-owner', 'PROPRIÉTAIRE', 'Afficher l’aide OWNER GOLD', async ({ chat, isOwner }) => {
   requireOwner(isOwner);
@@ -968,7 +968,17 @@ async function startWhatsApp() {
       const isOwner = Boolean(message.key.fromMe)
         || (connectedOwnerNumber && actorNumber === connectedOwnerNumber)
         || OWNER_NUMBERS.has(actorNumber);
-      await executeCommand(message, name.toLowerCase(), args, isOwner);
+      const commandName = name.toLowerCase();
+      if (settings.autoreact !== false && commands.has(commandName)) {
+        try {
+          await socket.sendMessage(message.key.remoteJid, {
+            react: { text: '⚡', key: message.key },
+          });
+        } catch (error) {
+          logger.debug({ err: error, command: commandName }, 'Automatic command reaction failed');
+        }
+      }
+      await executeCommand(message, commandName, args, isOwner);
     }
   });
 }
