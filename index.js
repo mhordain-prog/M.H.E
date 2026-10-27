@@ -48,6 +48,8 @@ let pairCooldownUntil = 0;
 const pairIpCooldowns = new Map();
 const PAIR_COOLDOWN_MS = 45_000;
 const commands = new Map();
+const recentGroupMessages = new Map();
+let activitySinceSave = 0;
 
 async function loadSettings() {
   try {
@@ -254,6 +256,49 @@ for (const feature of ['welcome', 'goodbye']) {
 }
 
 
+
+register('actifs', 'GROUPES', 'Classement des 15 membres les plus actifs depuis le démarrage du compteur', async ({ chat }) => {
+  requireGroup(chat);
+  const group = getGroupSettings(chat);
+  const activity = group.activity || {};
+  const names = group.activityNames || {};
+  const top = Object.entries(activity).sort((a, b) => b[1] - a[1]).slice(0, 15);
+  if (!top.length) {
+    await sendText(chat, '📊 Pas encore de statistiques. M.H.E compte les messages reçus à partir de son démarrage.');
+    return;
+  }
+  const lines = ['╭───〔 🏆 M.H.E GOLD — ACTIFS 〕───╮'];
+  top.forEach(([jid, count], index) => {
+    const medal = ['🥇', '🥈', '🥉'][index] || `${index + 1}.`;
+    lines.push(`${medal} ${names[jid] || '@' + cleanNumber(jid)} — ${count} message(s)`);
+  });
+  lines.push('╰──────────────────────────────╯', '📌 Statistiques comptées depuis le démarrage du compteur.');
+  await sendText(chat, lines.join('\n'));
+});
+register('delall', 'GROUPES', 'Supprimer les messages récents suivis d’un membre non-administrateur (mention ou réponse)', async ({ chat, actor, message }) => {
+  requireGroup(chat);
+  const context = await groupContext(chat, actor);
+  requireAdmin(context);
+  const targets = targetJids(message);
+  if (targets.length !== 1) throw new Error('Mentionne une seule personne ou réponds à son message.');
+  const target = targets[0];
+  const targetInfo = context.participants.find((p) => cleanNumber(p.id) === cleanNumber(target));
+  if (!targetInfo) throw new Error('Ce membre n’est pas dans le groupe.');
+  if (targetInfo.admin || targetInfo.isAdmin || targetInfo.isSuperAdmin) throw new Error('Par sécurité, .delall ne cible pas un administrateur du groupe.');
+  const tracked = recentGroupMessages.get(chat) || [];
+  const matches = tracked.filter((key) => cleanNumber(key.participant || '') === cleanNumber(target));
+  if (!matches.length) throw new Error('Aucun message récent de cette personne n’est suivi depuis le démarrage du bot.');
+  let deleted = 0;
+  for (const key of matches.slice(-100)) {
+    try {
+      await socket.sendMessage(chat, { delete: key });
+      deleted += 1;
+    } catch (error) {
+      logger.debug({ err: error, group: chat }, 'Could not delete a tracked group message');
+    }
+  }
+  await sendText(chat, `🗑️ Suppression terminée : ${deleted}/${Math.min(matches.length, 100)} message(s) suivi(s) de @${cleanNumber(target)}.`, { mentions: [target] });
+});
 
 const MHE_GROUP_GOLD_ALIASES = [
   'mhe-group', 'everyone', 'hidetag', 'tag',
@@ -923,6 +968,23 @@ async function startWhatsApp() {
       const actorNumber = cleanNumber(actor);
       const blocked = (settings.banned || []).some((item) => cleanNumber(item) === actorNumber);
       if (blocked && !message.key.fromMe) continue;
+      if (message.key.remoteJid?.endsWith('@g.us') && !message.key.fromMe) {
+        const groupJid = message.key.remoteJid;
+        const group = getGroupSettings(groupJid);
+        group.activity ||= {};
+        group.activityNames ||= {};
+        group.activity[actor] = (group.activity[actor] || 0) + 1;
+        if (message.pushName) group.activityNames[actor] = message.pushName;
+        const recent = recentGroupMessages.get(groupJid) || [];
+        recent.push(message.key);
+        if (recent.length > 1000) recent.splice(0, recent.length - 1000);
+        recentGroupMessages.set(groupJid, recent);
+        activitySinceSave += 1;
+        if (activitySinceSave >= 10) {
+          activitySinceSave = 0;
+          saveSettings().catch((error) => logger.warn({ err: error }, 'Could not persist group activity'));
+        }
+      }
       if (await handleMheGoldIncoming(message, { mode })) continue;
       if (!text.startsWith(PREFIX)) continue;
       const [name, ...args] = text.slice(PREFIX.length).trim().split(/\s+/);
