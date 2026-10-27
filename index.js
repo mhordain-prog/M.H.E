@@ -150,51 +150,49 @@ async function executeCommand(message, commandName, args, isOwner) {
   }
 }
 
-register('menu', 'GÉNÉRAL', 'Afficher toutes les commandes enregistrées dans le style GOLD', async ({ chat }) => {
+register('menu', 'GÉNÉRAL', 'Afficher le menu GOLD et les commandes réellement enregistrées', async ({ chat }) => {
   const categories = new Map();
-  // Build the menu at invocation time so commands registered later during startup are included.
   for (const command of commands.values()) {
     if (!categories.has(command.category)) categories.set(command.category, []);
     categories.get(command.category).push(command);
   }
   const lines = [
-    '╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╮',
-    '┃        ✨ GOLDEN BOT SYSTEM ✨       ┃',
-    '┃',
-    `┃ 👑 ${BOT_NAME} 👑`,
-    '┃       ULTRA LUXURY MENU 💎',
-    '┃',
-    `┃ ✨ Welcome • ${DISPLAY_OWNER} ✨`,
-    `┃ ⏱️ Active : ${formatUptime(Date.now() - STARTED_AT)}`,
-    `┃ 🔢 Version : ${BOT_VERSION}`,
-    `┃ ⚡ Commands : ${commands.size} registered`,
-    `┃ 🔰 Prefix : ${PREFIX}   🔒 Mode : ${mode.toUpperCase()}`,
-    '╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯',
+    '╔════════◇◆◇════════╗',
+    '       👑 M.H.E-MD GOLD 👑',
+    '       ✨ GOLDEN BOT SYSTEM ✨',
+    '       ULTRA LUXURY MENU',
+    '╠════════════════════╣',
+    '👑 Propriétaire : ' + DISPLAY_OWNER,
+    '🕒 Date : ' + new Date().toLocaleString('fr-FR'),
+    '⏱️ Uptime : ' + formatUptime(Date.now() - STARTED_AT),
+    '⚡ Version : ' + BOT_VERSION,
+    '📚 Commandes : ' + commands.size,
+    '🔖 Préfixe : ' + PREFIX,
+    '🔒 Mode : ' + mode.toUpperCase(),
+    '╚════════════════════╝',
     '',
   ];
   for (const [category, items] of categories) {
-    lines.push(`╭━━━『 👑 ${category} 👑 』━━━◈`);
-    for (const item of items) {
-      lines.push(`┃ ⚡ ${PREFIX}${item.name}  •  ${item.description}`);
-    }
-    lines.push('╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━◈', '');
+    lines.push('╔═══════ 👑 ' + category + ' 👑 ═══════╗');
+    for (const item of items) lines.push('║ ➣ ' + PREFIX + item.name);
+    lines.push('╚════════════════════════════╝', '');
   }
   lines.push(
-    '✨ POWERED BY M.H.E-MD GOLD ✨',
-    'Elite • Gold Edition • Pairing-code connection',
-    'Type ' + PREFIX + 'menu to reopen.',
-    'Le compteur correspond aux commandes réellement enregistrées au démarrage.',
+    '╔══════════ ABOUT MHE ══════════╗',
+    '💛 M.H.E-MD GOLD — Gold Luxury Edition',
+    '👑 Creator : ' + DISPLAY_OWNER,
+    '⚡ Rapide • Fiable • Multifonction',
+    '╚════════════════════════════════╝'
   );
   const menuText = lines.join('\n');
-  // Use the connected WhatsApp account's profile photo automatically when available.
+  // Envoie la photo de profil WhatsApp du bot avec le menu en légende.
   try {
-    const botJid = socket?.user?.id;
+    const botJid = socket && socket.user && socket.user.id;
     if (!botJid) throw new Error('WhatsApp profile is not ready');
     const profileUrl = await socket.profilePictureUrl(botJid, 'image');
-    if (!profileUrl) throw new Error('No profile picture configured');
     await socket.sendMessage(chat, { image: { url: profileUrl }, caption: menuText });
   } catch (error) {
-    logger.info({ err: error }, 'Bot profile photo unavailable; sending text menu');
+    logger.info({ err: error }, 'Profile image unavailable; sending text menu');
     await sendText(chat, menuText);
   }
 });
