@@ -91,7 +91,7 @@ async function handleAntiStatusMention(message) {
   if (!chat.endsWith('@g.us') || settings.antistatusmention !== true || message.key?.fromMe) return false;
 
   const text = messageText(message);
-  const detected = hasStatusMentionPayload(message.message) || /(^|\\s)@status\\b/i.test(text);
+  const detected = hasStatusMentionPayload(message.message) || /(^|\s)@status\b/i.test(text);
   if (!detected) return false;
 
   const actor = senderJid(message);
