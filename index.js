@@ -72,6 +72,73 @@ function getGroupSettings(jid) {
   settings.groups[jid] ||= { welcome: false, goodbye: false };
   return settings.groups[jid];
 }
+
+function hasStatusMentionPayload(value, seen = new Set()) {
+  if (!value || typeof value !== 'object' || seen.has(value)) return false;
+  seen.add(value);
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'groupStatusMentionMessage') return true;
+    if (key === 'mentionedJid' && Array.isArray(child)
+      && child.some((jid) => typeof jid === 'string' && /(?:^|@)status(?:@broadcast)?$/i.test(jid))) return true;
+    if (typeof child === 'string' && /^(?:status@broadcast|@status)$/i.test(child)) return true;
+    if (hasStatusMentionPayload(child, seen)) return true;
+  }
+  return false;
+}
+
+async function handleAntiStatusMention(message) {
+  const chat = message.key?.remoteJid || '';
+  if (!chat.endsWith('@g.us') || settings.antistatusmention !== true || message.key?.fromMe) return false;
+
+  const text = messageText(message);
+  const detected = hasStatusMentionPayload(message.message) || /(^|\\s)@status\\b/i.test(text);
+  if (!detected) return false;
+
+  const actor = senderJid(message);
+  if (!actor) return true;
+  try {
+    await socket.sendMessage(chat, { delete: message.key });
+  } catch (error) {
+    logger.warn({ err: error, group: chat }, 'ANTISTATUSMENTION could not delete the message');
+  }
+
+  const group = getGroupSettings(chat);
+  group.statusMentionWarnings ||= {};
+  const actorKey = cleanNumber(actor) || actor;
+  const warnings = (Number(group.statusMentionWarnings[actorKey]) || 0) + 1;
+  group.statusMentionWarnings[actorKey] = warnings;
+  await saveSettings();
+
+  let actorIsAdmin = false;
+  let botIsAdmin = false;
+  try {
+    const context = await groupContext(chat, actor);
+    actorIsAdmin = context.actorIsAdmin;
+    botIsAdmin = context.botIsAdmin;
+  } catch (error) {
+    logger.warn({ err: error, group: chat }, 'ANTISTATUSMENTION could not verify group permissions');
+  }
+
+  if (warnings >= 3 && botIsAdmin && !actorIsAdmin && cleanNumber(actor) !== cleanNumber(socket?.user?.id || '')) {
+    try {
+      await socket.groupParticipantsUpdate(chat, [actor], 'remove');
+      delete group.statusMentionWarnings[actorKey];
+      await saveSettings();
+      await sendText(chat, `🚫 @${cleanNumber(actor)} a été retiré du groupe après 3 avertissements pour les mentions de statut.`, { mentions: [actor] });
+      return true;
+    } catch (error) {
+      logger.warn({ err: error, group: chat }, 'ANTISTATUSMENTION could not remove the member');
+    }
+  }
+
+  const remaining = Math.max(0, 3 - warnings);
+  const note = warnings >= 3
+    ? (actorIsAdmin ? '3 avertissements atteints, mais les administrateurs ne sont pas exclus automatiquement.' : '3 avertissements atteints ; le bot doit être administrateur pour exclure un membre.')
+    : `Avertissement ${warnings}/3. Il reste ${remaining} avant une éventuelle exclusion.`;
+  await sendText(chat, `⚠️ @${cleanNumber(actor)} : les mentions de statut sont interdites dans ce groupe.\\n${note}`, { mentions: [actor] });
+  return true;
+}
+
 function cleanNumber(jid = '') {
   return jid.split('@')[0].split(':')[0].replace(/\D/g, '');
 }
@@ -530,6 +597,12 @@ for (const alias of ['antilink','antidelete','antitag','antistatusmention','anti
     if (!['on', 'off'].includes(state)) throw new Error(`Utilise ${PREFIX}${alias} on ou off`);
     settings[alias] = state === 'on';
     await saveSettings();
+    if (alias === 'antistatusmention') {
+      await sendText(chat, state === 'on'
+        ? '✅ ANTISTATUSMENTION activé : le bot détectera les mentions de statut prises en charge, supprimera le message si WhatsApp l’autorise, avertira le membre et tentera une exclusion après 3 avertissements si le bot est administrateur.'
+        : '🛑 ANTISTATUSMENTION désactivé.');
+      return;
+    }
     await sendText(chat, `✅ ${alias.toUpperCase()} : ${state.toUpperCase()}. Attention : ce réglage est enregistré; son effet dépend de son intégration dans le gestionnaire WhatsApp.`);
   }, true);
 }
@@ -918,6 +991,7 @@ async function startWhatsApp() {
     if (type !== 'notify') return;
     for (const message of messages) {
       if (!message.message || message.key.remoteJid === 'status@broadcast') continue;
+      if (await handleAntiStatusMention(message)) continue;
       const text = messageText(message).trim();
       const actor = senderJid(message);
       const actorNumber = cleanNumber(actor);
