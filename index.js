@@ -877,8 +877,13 @@ async function startWhatsApp() {
         logger.warn('WhatsApp session logged out; clearing invalid auth files to allow a new pairing.');
         (async () => {
           try {
-            await fs.rm(SESSION_DIR, { recursive: true, force: true });
+            // SESSION_DIR may be a mounted Railway volume root; never remove
+            // the mount point itself (EBUSY). Clear only its contents.
             await fs.mkdir(SESSION_DIR, { recursive: true });
+            const entries = await fs.readdir(SESSION_DIR);
+            await Promise.all(entries.map((entry) =>
+              fs.rm(path.join(SESSION_DIR, entry), { recursive: true, force: true })
+            ));
             authState = undefined;
             saveCreds = undefined;
             reconnectTimer = setTimeout(() => startWhatsApp().catch((err) => logger.error({ err }, 'WhatsApp restart after logout failed')), 1500);
