@@ -859,7 +859,7 @@ async function startWhatsApp() {
     version,
     logger,
     printQRInTerminal: false,
-    browser: ['M.H.E.', 'Chrome', '1.0.0'],
+    browser: ['Ubuntu', 'Chrome', '1.0.0'],
     markOnlineOnConnect: false,
     syncFullHistory: false,
   });
