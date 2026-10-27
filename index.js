@@ -43,7 +43,7 @@ let authState;
 let saveCreds;
 let reconnectTimer;
 let mode = process.env.BOT_MODE === 'public' ? 'public' : 'private';
-let settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true };
+let settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true, autoreact: true };
 let pairCooldownUntil = 0;
 const pairIpCooldowns = new Map();
 const PAIR_COOLDOWN_MS = 45_000;
@@ -52,7 +52,7 @@ const commands = new Map();
 async function loadSettings() {
   try {
     const parsed = JSON.parse(await fs.readFile(SETTINGS_FILE, 'utf8'));
-    settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true, ...parsed, groups: parsed.groups || {} };
+    settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true, autoreact: true, ...parsed, groups: parsed.groups || {} };
     if (parsed.mode === 'public' || parsed.mode === 'private') mode = parsed.mode;
     if (typeof parsed.prefix === 'string' && parsed.prefix.length > 0 && parsed.prefix.length <= 3) PREFIX = parsed.prefix;
     if (typeof parsed.botname === 'string' && parsed.botname.trim()) BOT_NAME = parsed.botname;
@@ -137,6 +137,13 @@ async function executeCommand(message, commandName, args, isOwner) {
   }
   try {
     await command.handler({ message, chat, actor, args, isOwner });
+    if (settings.autoreact !== false && message.key?.id && socket) {
+      try {
+        await socket.sendMessage(chat, { react: { text: '⚡', key: message.key } });
+      } catch (reactionError) {
+        logger.debug({ err: reactionError, command: commandName }, 'Automatic command reaction failed');
+      }
+    }
   } catch (error) {
     logger.warn({ err: error, command: commandName }, 'Command failed');
     await sendText(chat, `⚠️ ${error.message || 'La commande a échoué.'}`);
