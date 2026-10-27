@@ -118,8 +118,20 @@ function requireGroup(jid) {
   if (!jid.endsWith('@g.us')) throw new Error('Cette commande fonctionne uniquement dans un groupe.');
 }
 function requireAdmin(context) {
-  if (!context.actorIsAdmin) throw new Error('Réservé aux administrateurs du groupe.');
-  if (!context.botIsAdmin) throw new Error('M.H.E. doit être administrateur du groupe pour effectuer cette action.');
+  if (!context.actorIsAdmin) {
+    throw new Error('⛔ Cette commande est réservée aux administrateurs du groupe.');
+  }
+  if (!context.botIsAdmin) {
+    throw new Error(
+      '⚠️ M.H.E-MD GOLD doit être administrateur pour effectuer cette action.\n\n' +
+      'Pour le promouvoir :\n' +
+      '1. Ouvre les informations du groupe.\n' +
+      '2. Va dans la liste des participants.\n' +
+      '3. Sélectionne M.H.E-MD GOLD.\n' +
+      '4. Choisis « Nommer administrateur ».\n\n' +
+      'Puis réessaie la commande.'
+    );
+  }
 }
 function targetJids(message) {
   const targets = mentionedJids(message);
@@ -360,6 +372,20 @@ register('revoke', 'GROUPES', 'Révoquer le lien d’invitation', async ({ chat,
   await socket.groupRevokeInvite(chat);
   const code = await socket.groupInviteCode(chat);
   await sendText(chat, `✅ Ancien lien révoqué. Nouveau lien : https://chat.whatsapp.com/${code}`);
+});
+register('groupe', 'GROUPES', 'Vérifier le statut administrateur de M.H.E : .groupe statut', async ({ chat, actor, args }) => {
+  requireGroup(chat);
+  if ((args[0] || '').toLowerCase() !== 'statut') {
+    throw new Error(`Utilise ${PREFIX}groupe statut.`);
+  }
+  const context = await groupContext(chat, actor);
+  const botStatus = context.botIsAdmin
+    ? '✅ M.H.E-MD GOLD est administrateur du groupe.'
+    : '⚠️ M.H.E-MD GOLD n’est pas administrateur du groupe. Un administrateur doit le promouvoir dans les informations du groupe.';
+  const actorStatus = context.actorIsAdmin
+    ? '✅ Tu es administrateur du groupe.'
+    : 'ℹ️ Ton compte n’est pas administrateur du groupe.';
+  await sendText(chat, `╭┈───〔 M.H.E ADMIN CHECK 〕┈───⊷\n${botStatus}\n${actorStatus}\n╰━━━━━━━━━━━━━━━━━━━━⊷`);
 });
 for (const alias of ['ginfo', 'gcinfo', 'gcstatus']) {
   register(alias, 'GROUPES', 'Afficher les informations du groupe', async ({ chat }) => {
