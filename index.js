@@ -44,7 +44,7 @@ let authState;
 let saveCreds;
 let reconnectTimer;
 let mode = process.env.BOT_MODE === 'public' ? 'public' : 'private';
-let settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true };
+let settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true };
 let pairCooldownUntil = 0;
 const pairIpCooldowns = new Map();
 const PAIR_COOLDOWN_MS = 45_000;
@@ -55,7 +55,7 @@ let activitySinceSave = 0;
 async function loadSettings() {
   try {
     const parsed = JSON.parse(await fs.readFile(SETTINGS_FILE, 'utf8'));
-    settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true, ...parsed, groups: parsed.groups || {} };
+    settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true, ...parsed, groups: parsed.groups || {} };
     if (parsed.mode === 'public' || parsed.mode === 'private') mode = parsed.mode;
     if (typeof parsed.prefix === 'string' && parsed.prefix.length > 0 && parsed.prefix.length <= 3) PREFIX = parsed.prefix;
     if (typeof parsed.botname === 'string' && parsed.botname.trim()) BOT_NAME = parsed.botname;
@@ -1016,9 +1016,12 @@ async function startWhatsApp() {
         const groupJid = message.key.remoteJid;
         const actorJid = senderJid(message);
         const isStatusMention = Boolean(message.message?.groupStatusMentionMessage);
-        const isLink = /(?:https?:\/\/|www\.|chat\.whatsapp\.com\/|wa\.me\/|t\.me\/|bit\.ly\/)/i.test(text);
+        const mentionCount = message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length || 0;
+        const isMassTag = mentionCount >= 5;
+        const isLink = /(?:https?:\/\/|www\.|chat\.whatsapp\.com\/|wa\.me\/|t\.me\/|bit\.ly\/|(?:^|[\s([<{])(?:[a-z0-9-]+\.)+(?:com|net|org|io|co|me|app|dev|gg|xyz|info|site|online|ru|fr|cg|uk|us)(?:\b|\/))/i.test(text);
         let reason = '';
         if (settings.antistatusmention && isStatusMention) reason = 'Mention de statut interdite';
+        else if (settings.antitag && isMassTag) reason = 'Mention massive interdite';
         else if (settings.antilink && isLink) reason = 'Lien interdit';
         else if (settings.antispam && warningManager.detectSpam(groupJid, actorJid)) reason = 'Spam / messages répétés';
         if (reason) {
