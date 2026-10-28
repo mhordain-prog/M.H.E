@@ -1016,7 +1016,7 @@ async function startWhatsApp() {
         const groupJid = message.key.remoteJid;
         const actorJid = senderJid(message);
         const isStatusMention = Boolean(message.message?.groupStatusMentionMessage);
-        const isLink = /(?:https?:\\/\\/|www\\.|chat\\.whatsapp\\.com\\/|wa\\.me\\/|t\\.me\\/|bit\\.ly\\/)/i.test(text);
+        const isLink = /(?:https?:\/\/|www\.|chat\.whatsapp\.com\/|wa\.me\/|t\.me\/|bit\.ly\/)/i.test(text);
         let reason = '';
         if (settings.antistatusmention && isStatusMention) reason = 'Mention de statut interdite';
         else if (settings.antilink && isLink) reason = 'Lien interdit';
@@ -1065,7 +1065,7 @@ register('warnings', 'GROUPES', 'Afficher les avertissements actifs d’un membr
   const target = targets[0] || actor;
   const entries = await warningManager.getWarnings(chat, target);
   const lines = entries.map((entry, index) => `${index + 1}. ${entry.reason} — ${new Date(entry.at).toLocaleDateString('fr-FR')}`);
-  await sendText(chat, `⚠️ Avertissements de @${cleanNumber(target)} : ${entries.length}/3 actifs sur 30 jours.${lines.length ? '\\n' + lines.join('\\n') : '\\nAucun avertissement actif.'}`, { mentions: [target] });
+  await sendText(chat, `⚠️ Avertissements de @${cleanNumber(target)} : ${entries.length}/3 actifs sur 30 jours.${lines.length ? '\n' + lines.join('\n') : '\nAucun avertissement actif.'}`, { mentions: [target] });
 });
 
 register('resetwarn', 'GROUPES', 'Réinitialiser les avertissements d’un membre (administrateur du groupe)', async ({ chat, actor, message }) => {
