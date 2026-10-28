@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import pino from 'pino';
 import { registerMheGoldV2 } from './core/mhe-gold-v2.js';
+import { createWarningManager } from './core/warnings.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import makeWASocket, {
@@ -43,7 +44,7 @@ let authState;
 let saveCreds;
 let reconnectTimer;
 let mode = process.env.BOT_MODE === 'public' ? 'public' : 'private';
-let settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true, autoreact: true };
+let settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true };
 let pairCooldownUntil = 0;
 const pairIpCooldowns = new Map();
 const PAIR_COOLDOWN_MS = 45_000;
@@ -54,7 +55,7 @@ let activitySinceSave = 0;
 async function loadSettings() {
   try {
     const parsed = JSON.parse(await fs.readFile(SETTINGS_FILE, 'utf8'));
-    settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true, autoreact: true, ...parsed, groups: parsed.groups || {} };
+    settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true, ...parsed, groups: parsed.groups || {} };
     if (parsed.mode === 'public' || parsed.mode === 'private') mode = parsed.mode;
     if (typeof parsed.prefix === 'string' && parsed.prefix.length > 0 && parsed.prefix.length <= 3) PREFIX = parsed.prefix;
     if (typeof parsed.botname === 'string' && parsed.botname.trim()) BOT_NAME = parsed.botname;
@@ -594,7 +595,7 @@ for (const alias of ['setwelcome', 'setgoodbye']) {
     await sendText(chat, `✅ Texte ${alias} enregistré.`);
   }, true);
 }
-for (const alias of ['antilink','antidelete','antitag','antistatusmention','antiedit','anticall','autoread','autotype','autotyping','autoreact','recording','online','statusview','statuslike','adminaction']) {
+for (const alias of ['antilink','antispam','antidelete','antitag','antistatusmention','antiedit','anticall','autoread','autotype','autotyping','autoreact','recording','online','statusview','statuslike','adminaction']) {
   register(alias, 'PROPRIÉTAIRE', 'Modifier un réglage du bot', async ({ chat, args, isOwner }) => {
     requireOwner(isOwner);
     const state = (args[0] || '').toLowerCase();
