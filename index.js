@@ -270,23 +270,48 @@ for (const feature of ['welcome', 'goodbye']) {
 
 
 
-register('actifs', 'GROUPES', 'Classement des 15 membres les plus actifs depuis le démarrage du compteur', async ({ chat }) => {
+register('actifs', 'GROUPES', 'Classement des membres actifs ou statistiques d’un membre', async ({ chat, message, args }) => {
   requireGroup(chat);
   const group = getGroupSettings(chat);
   const activity = group.activity || {};
   const names = group.activityNames || {};
-  const top = Object.entries(activity).sort((a, b) => b[1] - a[1]).slice(0, 15);
-  if (!top.length) {
-    await sendText(chat, '📊 Pas encore de statistiques. M.H.E compte les messages reçus à partir de son démarrage.');
+  const requestedTargets = targetJids(message);
+  const requestedNumber = Number.parseInt(args[0], 10);
+  const limit = Number.isInteger(requestedNumber) && requestedNumber > 0
+    ? Math.min(requestedNumber, 50)
+    : 10;
+
+  // .actifs @membre (ou en répondant à son message) affiche ses statistiques.
+  if (requestedTargets.length) {
+    const target = requestedTargets[0];
+    const count = Number(activity[target] || 0);
+    if (count === 0) {
+      await sendText(chat, `📊 @${cleanNumber(target)} n’a pas encore de messages enregistrés par M.H.E.`, { mentions: [target] });
+      return;
+    }
+    await sendText(chat, `╭───〔 📊 STATS ACTIFS 〕───╮\n👤 Membre : @${cleanNumber(target)}\n💬 Messages comptés : ${count}\n╰────────────────────────╯`, { mentions: [target] });
     return;
   }
-  const lines = ['╭───〔 🏆 M.H.E GOLD — ACTIFS 〕───╮'];
+
+  const top = Object.entries(activity)
+    .filter(([jid, count]) => jid && Number(count) > 0)
+    .sort((a, b) => Number(b[1]) - Number(a[1]))
+    .slice(0, limit);
+  if (!top.length) {
+    await sendText(chat, '📊 Pas encore de statistiques. M.H.E compte les messages reçus dans le groupe à partir de son démarrage.');
+    return;
+  }
+
+  // Enregistre les compteurs avant d’envoyer le classement.
+  await saveSettings();
+  const mentions = top.map(([jid]) => jid);
+  const lines = ['╭───〔 🏆 M.H.E-MD GOLD — ACTIFS 〕───╮'];
   top.forEach(([jid, count], index) => {
     const medal = ['🥇', '🥈', '🥉'][index] || `${index + 1}.`;
-    lines.push(`${medal} ${names[jid] || '@' + cleanNumber(jid)} — ${count} message(s)`);
+    lines.push(`${medal} @${cleanNumber(jid)} — ${count} message(s)`);
   });
-  lines.push('╰──────────────────────────────╯', '📌 Statistiques comptées depuis le démarrage du compteur.');
-  await sendText(chat, lines.join('\n'));
+  lines.push('╰────────────────────────────────╯', `👥 Membres affichés : ${top.length}`, '📌 Statistiques enregistrées dans les paramètres du bot.');
+  await sendText(chat, lines.join('\n'), { mentions });
 });
 register('delall', 'GROUPES', 'Supprimer les messages récents suivis d’un membre non-administrateur (mention ou réponse)', async ({ chat, actor, message }) => {
   requireGroup(chat);
