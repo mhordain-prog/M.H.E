@@ -101,13 +101,28 @@ async function sendText(jid, text, options = {}) {
   if (!socket) throw new Error('WhatsApp socket is not ready');
   return socket.sendMessage(jid, { text, ...options });
 }
+function jidKey(jid = '') {
+  return String(jid).trim().toLowerCase().replace(/:\\d+(?=@)/, '');
+}
+function participantMatchesJid(participant, candidates) {
+  const participantIds = [participant?.id, participant?.jid, participant?.lid, participant?.phoneNumber]
+    .filter(Boolean)
+    .map(jidKey);
+  const candidateIds = candidates.filter(Boolean).map(jidKey);
+  if (participantIds.some((id) => candidateIds.includes(id))) return true;
+
+  const participantNumbers = [participant?.id, participant?.jid, participant?.phoneNumber]
+    .filter(Boolean).map(cleanNumber).filter(Boolean);
+  const candidateNumbers = candidates.filter(Boolean).map(cleanNumber).filter(Boolean);
+  return participantNumbers.some((number) => candidateNumbers.includes(number));
+}
 async function groupContext(jid, actor) {
   const metadata = await socket.groupMetadata(jid);
   const participants = metadata.participants || [];
-  const actorNumber = cleanNumber(actor);
-  const botNumber = cleanNumber(socket.user?.id || '');
-  const actorInfo = participants.find((p) => cleanNumber(p.id) === actorNumber);
-  const botInfo = participants.find((p) => cleanNumber(p.id) === botNumber);
+  const actorIds = [actor];
+  const actorInfo = participants.find((p) => participantMatchesJid(p, actorIds));
+  const botIds = [socket.user?.id, socket.user?.lid, socket.user?.phoneNumber];
+  const botInfo = participants.find((p) => participantMatchesJid(p, botIds));
   return {
     metadata,
     participants,
