@@ -70,17 +70,6 @@ export function createWarningManager({ file = './data/warnings.json', sendText, 
       final ? '🛑 Avertissement final : respecte les règles du groupe.' : '🔒 Merci de respecter les règles du groupe.',
     ].join('\n');
     await sendText(groupJid, text, { mentions: [actorJid] });
-    if (messageKey) {
-      try {
-        const sock = getSocket();
-        const metadata = await sock?.groupMetadata(groupJid);
-        const botNumber = clean(sock?.user?.id || '');
-        const bot = (metadata?.participants || []).find((item) => clean(item.id) === botNumber);
-        if (bot?.admin || bot?.isAdmin || bot?.isSuperAdmin) {
-          await sock.sendMessage(groupJid, { delete: messageKey });
-        }
-      } catch { /* La suppression dépend des droits WhatsApp du bot. */ }
-    }
     return { count, final };
   }
 
