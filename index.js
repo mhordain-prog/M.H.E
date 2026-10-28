@@ -1012,6 +1012,24 @@ async function startWhatsApp() {
           saveSettings().catch((error) => logger.warn({ err: error }, 'Could not persist group activity'));
         }
       }
+      if (message.key.remoteJid?.endsWith('@g.us') && !message.key.fromMe) {
+        const groupJid = message.key.remoteJid;
+        const actorJid = senderJid(message);
+        const isStatusMention = Boolean(message.message?.groupStatusMentionMessage);
+        const isLink = /(?:https?:\\/\\/|www\\.|chat\\.whatsapp\\.com\\/|wa\\.me\\/|t\\.me\\/|bit\\.ly\\/)/i.test(text);
+        let reason = '';
+        if (settings.antistatusmention && isStatusMention) reason = 'Mention de statut interdite';
+        else if (settings.antilink && isLink) reason = 'Lien interdit';
+        else if (settings.antispam && warningManager.detectSpam(groupJid, actorJid)) reason = 'Spam / messages répétés';
+        if (reason) {
+          try {
+            await warningManager.warn({ groupJid, actorJid, reason });
+          } catch (error) {
+            logger.warn({ err: error, group: groupJid }, 'Could not issue group warning');
+          }
+          continue;
+        }
+      }
       if (await handleMheGoldIncoming(message, { mode })) continue;
       if (!text.startsWith(PREFIX)) continue;
       const [name, ...args] = text.slice(PREFIX.length).trim().split(/\s+/);
