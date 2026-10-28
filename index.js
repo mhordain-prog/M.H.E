@@ -1034,6 +1034,32 @@ const handleMheGoldIncoming = registerMheGoldV2({
   getSocket: () => socket,
   getPrefix: () => PREFIX,
 });
+const warningManager = createWarningManager({
+  sendText,
+  getSocket: () => socket,
+  getGroupSettings,
+  isOwnerNumber: (number) => OWNER_NUMBERS.has(number) || cleanNumber(socket?.user?.id || '') === number,
+});
+
+register('warnings', 'GROUPES', 'Afficher les avertissements actifs d’un membre ou les siens', async ({ chat, actor, message }) => {
+  requireGroup(chat);
+  const targets = targetJids(message);
+  const target = targets[0] || actor;
+  const entries = await warningManager.getWarnings(chat, target);
+  const lines = entries.map((entry, index) => `${index + 1}. ${entry.reason} — ${new Date(entry.at).toLocaleDateString('fr-FR')}`);
+  await sendText(chat, `⚠️ Avertissements de @${cleanNumber(target)} : ${entries.length}/3 actifs sur 30 jours.${lines.length ? '\\n' + lines.join('\\n') : '\\nAucun avertissement actif.'}`, { mentions: [target] });
+});
+
+register('resetwarn', 'GROUPES', 'Réinitialiser les avertissements d’un membre (administrateur du groupe)', async ({ chat, actor, message }) => {
+  requireGroup(chat);
+  const context = await groupContext(chat, actor);
+  if (!context.actorIsAdmin) throw new Error('⛔ Cette commande est réservée aux administrateurs du groupe.');
+  const targets = targetJids(message);
+  if (targets.length !== 1) throw new Error('Mentionne un seul membre ou réponds à son message.');
+  await warningManager.resetWarnings(chat, targets[0]);
+  await sendText(chat, `✅ Les avertissements de @${cleanNumber(targets[0])} ont été réinitialisés.`, { mentions: targets });
+});
+
 await startWhatsApp().catch((error) => logger.error({ err: error }, 'WhatsApp startup failed'));
 process.on('SIGTERM', async () => {
   server.close();
