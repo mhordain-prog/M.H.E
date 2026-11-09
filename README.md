@@ -108,3 +108,16 @@ Task lists and notes are stored separately per WhatsApp sender in the existing s
 The owner dashboard is available at `/control`. It displays the live WhatsApp connection state, process uptime and memory, the real command registry, command categories, and runtime configuration. The command catalogue supports search and category filtering. The dashboard is read-only; it does not expose destructive actions or WhatsApp session material.
 
 Before opening it in production, add `CONTROL_PANEL_TOKEN` to the Render service's secret environment variables. Use a randomly generated value of at least 24 characters, keep it private, and never commit it to Git. The dashboard asks for this token and keeps it in the browser session only. The status API returns HTTP 503 until the token is configured and HTTP 401 for an invalid token.
+
+
+## M.H.E GOLD — parrainage
+
+La page responsive noir et or est servie sur `/parrainage`. Elle permet de créer un code personnel, de partager un lien `/r/CODE`, puis de consulter les visites et les parrainages validés. Les visites ne prouvent pas qu'une personne a rejoint WhatsApp : l'équipe doit confirmer les parrainages avant de les compter comme validés. Aucune récompense automatique n'est attribuée par cette version.
+
+### Configuration requise
+
+1. Dans le projet Supabase déjà utilisé par M.H.E, ouvre SQL Editor et exécute le fichier `supabase/referrals.sql`.
+2. Vérifie que le projet utilise les variables Render `SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` (les mêmes que le stockage de session). La clé service_role reste uniquement dans les secrets Render.
+3. Déploie la branche après revue et vérifie `/parrainage`, la création d'un code et le suivi d'une visite.
+
+La page peut s'afficher sans Supabase, mais la création de liens et les statistiques renvoient une erreur explicite tant que la table n'est pas créée et que les variables ne sont pas configurées. L'endpoint de validation des parrainages est réservé au propriétaire via `CONTROL_PANEL_TOKEN`; le nombre validé doit être confirmé manuellement.
