@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#090909">
+  <title>Parrainage GOLD — M.H.E</title>
+  <style>
+    :root{color-scheme:dark;--gold:#d8b45a;--gold2:#f6df9b;--bg:#080808;--panel:#121212;--muted:#a8a08d;--line:#3b321e}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% -20%,#3b2c0d 0,transparent 48%),var(--bg);color:#f6f1e5;font:16px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
+    .wrap{width:min(960px,calc(100% - 28px));margin:auto;padding:28px 0 52px}
+    header{text-align:center;padding:28px 12px 30px}.crown{font-size:28px;color:var(--gold2)}.eyebrow{color:var(--gold);font-size:12px;letter-spacing:.24em;text-transform:uppercase;font-weight:800}
+    h1{font-size:clamp(30px,7vw,54px);line-height:1.05;margin:12px 0;background:linear-gradient(100deg,#fff1bf,#c99b39 55%,#fff0bd);background-clip:text;color:transparent}
+    .sub{color:#c7c0b0;max-width:600px;margin:0 auto}.panel{background:linear-gradient(145deg,#171717,#0f0f0f);border:1px solid var(--line);border-radius:20px;padding:clamp(18px,4vw,30px);box-shadow:0 18px 55px #0008;margin:16px 0}
+    h2{font-size:20px;margin:0 0 8px;color:var(--gold2)}p{color:#c5bead;margin:6px 0 16px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+    button{border:0;border-radius:12px;padding:13px 18px;font-weight:800;font-size:14px;cursor:pointer;background:linear-gradient(110deg,#f4d98d,#bd8e2c);color:#171107}
+    button.secondary{background:#211d14;border:1px solid #75602f;color:#f4d98d}button:disabled{opacity:.55;cursor:wait}
+    .field{display:flex;gap:8px;flex-wrap:wrap}.field input{flex:1;min-width:190px;background:#090909;border:1px solid #514324;border-radius:12px;color:#fff;padding:13px;font:inherit}
+    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}.stat{border:1px solid #3d321d;border-radius:14px;padding:17px;background:#0b0b0b}.stat strong{display:block;font-size:28px;color:var(--gold2)}.stat span{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+    .notice{border-left:3px solid var(--gold);padding:10px 13px;background:#201a0d;color:#d9cfb8;border-radius:0 10px 10px 0;font-size:13px;margin-top:18px}
+    #status{min-height:24px;color:#f0d58a;font-size:14px;margin-top:12px}.hidden{display:none}.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.step{padding:15px;border:1px solid #332b1b;border-radius:14px}.step b{color:var(--gold2);display:block;margin-bottom:5px}
+    footer{text-align:center;color:#716b5d;font-size:12px;margin-top:28px}
+    @media(max-width:620px){.stats,.steps{grid-template-columns:1fr}.stat{display:flex;align-items:center;justify-content:space-between}.stat strong{font-size:24px}.wrap{width:min(100% - 22px,960px)}}
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <div class="crown">♛</div>
+    <div class="eyebrow">M.H.E-MD GOLD • COMMUNITY</div>
+    <h1>LE CERCLE DES<br>PARRAINS</h1>
+    <p class="sub">Partage ton lien, invite de nouveaux membres dans l’univers M.H.E et suis les visites ainsi que les parrainages validés.</p>
+  </header>
+
+  <section class="panel">
+    <h2>Ton lien de parrainage</h2>
+    <p>Crée ton code personnel. Tu pourras ensuite partager ton lien avec tes amis.</p>
+    <div class="actions"><button id="create">♛ Créer mon lien GOLD</button><button id="restore" class="secondary">Retrouver mes statistiques</button></div>
+    <div id="linkArea" class="hidden" style="margin-top:18px">
+      <label for="refLink" class="eyebrow">TON LIEN PERSONNEL</label>
+      <div class="field"><input id="refLink" readonly><button id="copy">Copier</button></div>
+      <div class="stats">
+        <div class="stat"><div><span>Visites du lien</span><strong id="visits">—</strong></div></div>
+        <div class="stat"><div><span>Parrainages validés</span><strong id="valid">—</strong></div></div>
+        <div class="stat"><div><span>Code personnel</span><strong id="code" style="font-size:20px">—</strong></div></div>
+      </div>
+      <div class="notice">Les visites mesurent les ouvertures du lien. Un parrainage n’est compté comme validé qu’après vérification par l’équipe M.H.E. Aucune récompense automatique n’est promise.</div>
+    </div>
+    <div id="status" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Comment ça marche ?</h2>
+    <div class="steps">
+      <div class="step"><b>01 — Crée</b><span>Génère ton code et ton lien personnel.</span></div>
+      <div class="step"><b>02 — Partage</b><span>Envoie ton lien aux personnes que tu souhaites inviter.</span></div>
+      <div class="step"><b>03 — Suis</b><span>Consulte les visites et les parrainages confirmés.</span></div>
+    </div>
+  </section>
+  <footer>© M.H.E-MD GOLD · Système de parrainage</footer>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let currentCode = '';
+  const say = (message) => { $('status').textContent = message; };
+  async function api(url, options={}) {
+    const response = await fetch(url, { ...options, headers: { 'Content-Type':'application/json', ...(options.headers||{}) } });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Une erreur est survenue.');
+    return data;
+  }
+  function show(data) {
+    currentCode = data.code;
+    const link = location.origin + '/r/' + data.code;
+    $('refLink').value = link;
+    $('code').textContent = data.code;
+    $('visits').textContent = Number(data.visits || 0).toLocaleString('fr-FR');
+    $('valid').textContent = Number(data.validated_referrals || 0).toLocaleString('fr-FR');
+    $('linkArea').classList.remove('hidden');
+    localStorage.setItem('mhe_referral_code', data.code);
+  }
+  async function refresh(code) {
+    const data = await api('/api/referrals/' + encodeURIComponent(code));
+    show(data);
+    say('Statistiques actualisées.');
+  }
+  $('create').addEventListener('click', async () => {
+    $('create').disabled = true; say('Création de ton lien…');
+    try { const data = await api('/api/referrals/create', {method:'POST',body:'{}'}); await refresh(data.code); }
+    catch (error) { say(error.message); }
+    finally { $('create').disabled = false; }
+  });
+  $('restore').addEventListener('click', async () => {
+    const code = currentCode || localStorage.getItem('mhe_referral_code');
+    if (!code) return say('Aucun code enregistré sur cet appareil. Crée d’abord ton lien.');
+    try { await refresh(code); } catch (error) { say(error.message); }
+  });
+  $('copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($('refLink').value); say('Lien copié. Tu peux le partager.'); }
+    catch { $('refLink').select(); say('Sélectionne le lien puis copie-le.'); }
+  });
+  const params = new URLSearchParams(location.search);
+  if (params.has('ref')) say('Tu as ouvert un lien de parrainage M.H.E : ' + params.get('ref'));
+  if (params.has('setup')) say('Le suivi doit être configuré par l’administrateur avant utilisation.');
+  if (params.has('invalid')) say('Ce lien de parrainage est invalide.');
+  const saved = localStorage.getItem('mhe_referral_code');
+  if (saved) refresh(saved).catch(() => {});
+</script>
+</body>
+</html>
