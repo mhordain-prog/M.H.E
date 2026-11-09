@@ -41,7 +41,7 @@ test('notes are private to each sender and can be deleted', async () => {
   await commands.get('note').handler({ chat: 'a@s.whatsapp.net', actor: 'a@s.whatsapp.net', args: ['save', 'Remember this'] });
   await commands.get('note').handler({ chat: 'b@s.whatsapp.net', actor: 'b@s.whatsapp.net', args: ['list'] });
   assert.equal(settings.notes['a@s.whatsapp.net'].length, 1);
-  assert.equal(settings.notes['b@s.whatsapp.net'], undefined);
+  assert.deepEqual(settings.notes['b@s.whatsapp.net'], []);
   assert.match(sent.at(-1).text, /no saved notes/i);
   await commands.get('note').handler({ chat: 'a@s.whatsapp.net', actor: 'a@s.whatsapp.net', args: ['delete', '1'] });
   assert.equal(settings.notes['a@s.whatsapp.net'].length, 0);
