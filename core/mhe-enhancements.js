@@ -19,7 +19,7 @@ function displayCategory(category) {
     'OUTILS': 'TOOLS',
     'M.H.E GOLD V2': 'AI & GOLD V2',
   };
-  return labels[category] || String(category).normalize('NFD').replace(/\\p{Diacritic}/gu, '').toUpperCase();
+    return labels[category] || String(category).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
 }
 
 function getCategories(commands) {
@@ -171,7 +171,7 @@ export function registerMheEnhancements({
     }
     const [category, items] = categories[index];
     const lines = items.map((item) => `• ${getPrefix()}${item.name} — ${item.description || 'No description'}`);
-    await sendText(chat, `👑 M.H.E GOLD — ${category}\n\n${lines.join('\n')}\n\nTotal: ${items.length} command(s)\nUse ${getPrefix()}menu to return.`);
+    await sendText(chat, `👑 M.H.E GOLD — ${displayCategory(category)}\n\n${lines.join('\n')}\n\nTotal: ${items.length} command(s)\nUse ${getPrefix()}menu to return.`);
   });
 
   register('searchcmd', 'GENERAL', 'Search registered commands by name or description', async ({ chat, args }) => {
