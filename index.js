@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import pino from 'pino';
 import { registerMheGoldV2 } from './core/mhe-gold-v2.js';
+import { registerMheEnhancements } from './core/mhe-enhancements.js';
 import { createWarningManager } from './core/warnings.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -1030,7 +1031,12 @@ async function startWhatsApp() {
     if (type !== 'notify') return;
     for (const message of messages) {
       if (!message.message || message.key.remoteJid === 'status@broadcast') continue;
-      const text = messageText(message).trim();
+      const interactiveId = message.message?.listResponseMessage?.singleSelectReply?.selectedRowId
+        || message.message?.buttonsResponseMessage?.selectedButtonId
+        || message.message?.templateButtonReplyMessage?.selectedId;
+      const text = interactiveId?.startsWith('mhecat:')
+        ? `${PREFIX}menucat ${interactiveId.slice('mhecat:'.length)}`
+        : messageText(message).trim();
       const actor = senderJid(message);
       const actorNumber = cleanNumber(actor);
       const blocked = (settings.banned || []).some((item) => cleanNumber(item) === actorNumber);
@@ -1131,6 +1137,13 @@ register('resetwarn', 'GROUPES', 'Réinitialiser les avertissements d’un membr
   if (targets.length !== 1) throw new Error('Mentionne un seul membre ou réponds à son message.');
   await warningManager.resetWarnings(chat, targets[0]);
   await sendText(chat, `✅ Les avertissements de @${cleanNumber(targets[0])} ont été réinitialisés.`, { mentions: targets });
+});
+
+registerMheEnhancements({
+  register, commands, sendText, getSocket: () => socket, settings, saveSettings,
+  getPrefix: () => PREFIX, getMode: () => mode, getBotName: () => BOT_NAME,
+  getOwnerName: () => DISPLAY_OWNER, getVersion: () => BOT_VERSION,
+  getStartedAt: () => STARTED_AT, getGroupContext: groupContext, requireGroup,
 });
 
 await startWhatsApp().catch((error) => logger.error({ err: error }, 'WhatsApp startup failed'));
