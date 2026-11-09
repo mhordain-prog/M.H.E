@@ -6,6 +6,7 @@ import { registerMheEnhancements } from './core/mhe-enhancements.js';
 import { registerControlCenter } from './core/control-center.js';
 import { createWarningManager } from './core/warnings.js';
 import { createSupabaseSessionStore } from './core/session-store.js';
+import { registerReferrals } from './core/referrals.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import makeWASocket, {
@@ -43,6 +44,7 @@ function formatUptime(ms) {
 const app = express();
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '2kb' }));
+registerReferrals({ app });
 app.get('/', (_req, res) => res.sendFile(path.resolve('index.html')));
 
 let socket;
