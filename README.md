@@ -36,6 +36,16 @@ Set environment variables in the hosting provider's secret-variable settings, no
 - `OWNER_NUMBERS=` — optional comma-separated trusted numbers, digits only
 - `SESSION_DIR=/app/sessions` — use a persistent volume in production
 - `SETTINGS_FILE=/app/data/settings.json`
+- `SUPABASE_URL` — URL HTTPS du projet Supabase (facultatif, mais nécessaire pour la sauvegarde distante).
+- `SUPABASE_SERVICE_ROLE_KEY` — clé secrète serveur du projet Supabase; ne jamais la mettre dans le navigateur ou le dépôt.
+- `MHE_SESSION_BUCKET=mhe-sessions` — bucket privé de stockage des fichiers de session (à créer dans Supabase Storage).
+- `MHE_SESSION_PREFIX=mhe/` — dossier logique réservé à la session MHE dans ce bucket.
+
+### Sauvegarde durable de la session WhatsApp
+
+Render Free ne conserve pas les fichiers locaux après un redéploiement ou un redémarrage. Pour éviter de perdre l'appairage, crée un bucket **privé** nommé `mhe-sessions` dans Supabase Storage, puis ajoute `SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` dans les variables secrètes du service Render MHE-GOLD. Le bot restaure les fichiers JSON avant de démarrer Baileys, sauvegarde les changements et synchronise les fichiers toutes les 15 secondes. En l'absence de ces deux variables, il fonctionne en mode local uniquement et l'endpoint `/health` indique `sessionPersistence: local-only`. Après une déconnexion explicitement signalée par WhatsApp, les fichiers distants de ce préfixe sont effacés pour permettre un nouvel appairage.
+
+Utilise un projet Supabase dédié à MHE et garde le bucket privé. La clé `service_role` est hautement privilégiée : ne la partage pas et ne la colle jamais dans le site web.
 
 The web interface is served from `index.html`. `POST /api/pair` requests a pairing code and has a cooldown. The code is returned only in the HTTP response and is not deliberately printed to logs. Keep the hosting dashboard and session volume private.
 
