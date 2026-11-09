@@ -75,3 +75,25 @@ Variables secrètes pour la voix synthétique :
 N’ajoute jamais les clés API au dépôt. Les messages envoyés à l’assistant IA quittent WhatsApp et sont transmis au fournisseur configuré; n’active cette fonction que si cela convient aux personnes qui l’utilisent. La commande vocale reste indisponible tant qu’un modèle TTS actuellement pris en charge n’est pas configuré. Vérifie la documentation du fournisseur avant l’activation en production.
 
 Ces changements sont en cours de revue dans une pull request. Ils ne sont pas encore fusionnés ni déclarés déployés.
+
+
+## GOLD Command Center — interactive menu and English utilities
+
+The `feature/mhe-gold-ultimate-menu` branch adds a category selector to `.menu` using Baileys interactive list messages, with a text fallback for clients that do not support the interactive payload. Selecting a category opens its live command list from the command registry. The message handler accepts list, button, and template-button response IDs for category navigation.
+
+New commands in this branch:
+
+- General/system: `.menucat`, `.searchcmd`, `.stats`
+- Utilities: `.time [IANA timezone]`, `.date [IANA timezone]`
+- Search: `.weather <city>` (Open-Meteo), `.wiki <topic>` (French Wikipedia)
+- Productivity: `.todo add|list|done|clear`, `.note save|list|delete`
+- Groups: `.groupinfo`, `.members`, `.setrules`, `.rules`
+
+Task lists and notes are stored separately per WhatsApp sender in the existing settings file. Limits are applied to prevent unbounded growth. Weather and encyclopedia lookups use fixed public API hosts and request timeouts. These additions do not require new API keys. They are source changes only until tests pass and a deployment is performed.
+
+
+## M.H.E GOLD Control Center
+
+The owner dashboard is available at `/control`. It displays the live WhatsApp connection state, process uptime and memory, the real command registry, command categories, and runtime configuration. The command catalogue supports search and category filtering. The dashboard is read-only; it does not expose destructive actions or WhatsApp session material.
+
+Before opening it in production, add `CONTROL_PANEL_TOKEN` to the Render service's secret environment variables. Use a randomly generated value of at least 24 characters, keep it private, and never commit it to Git. The dashboard asks for this token and keeps it in the browser session only. The status API returns HTTP 503 until the token is configured and HTTP 401 for an invalid token.
