@@ -26,6 +26,16 @@ test('registers the enhanced menu and useful English command families', () => {
   }
 });
 
+test('menu sends a live category selector with a safe text fallback', async () => {
+  const { commands, sent } = setup();
+  await commands.get('menu').handler({ chat: 'test@s.whatsapp.net' });
+  const interactive = sent.find((item) => item.payload?.sections);
+  assert.ok(interactive);
+  assert.equal(interactive.payload.buttonText, 'OPEN MENU');
+  assert.ok(interactive.payload.sections[0].rows.some((row) => row.rowId.startsWith('mhecat:')));
+  assert.ok(sent.some((item) => /M.H.E-MD GOLD/.test(item.text || '')));
+});
+
 test('todo list is stored per sender and persisted', async () => {
   const { commands, settings, sent, getSaved } = setup();
   await commands.get('todo').handler({ chat: 'a@s.whatsapp.net', actor: 'a@s.whatsapp.net', args: ['add', 'Finish homework'] });
