@@ -1021,7 +1021,11 @@ async function startWhatsApp() {
         logger.warn('WhatsApp session logged out; clearing invalid auth files to allow a new pairing.');
         (async () => {
           try {
-            // SESSION_DIR may be a mounted Railway volume root; never remove
+            if (sessionSyncTimer) {
+              clearInterval(sessionSyncTimer);
+              sessionSyncTimer = undefined;
+            }
+            // SESSION_DIR may be a mounted persistent volume root; never remove
             // the mount point itself (EBUSY). Clear only its contents.
             await sessionStore.clear();
             await fs.mkdir(SESSION_DIR, { recursive: true, mode: 0o700 });
