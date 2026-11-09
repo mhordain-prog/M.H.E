@@ -37,6 +37,7 @@ export function registerControlCenter({ app, commands, getSocket, getMode, getPr
       return res.status(503).json({ error: 'Control Center non configuré. Ajoute CONTROL_PANEL_TOKEN (au moins 24 caractères) dans les variables secrètes de Render.' });
     }
     if (!authorized(req)) return res.status(401).json({ error: 'Accès refusé. Saisis le mot de passe du Control Center.' });
+    res.set('Cache-Control', 'no-store');
     return res.json(createControlSnapshot({ commands, socket: getSocket(), mode: getMode(), prefix: getPrefix(), ownerName: getOwnerName(), startedAt: getStartedAt() }));
   });
 }
