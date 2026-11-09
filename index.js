@@ -28,6 +28,7 @@ const OWNER_NUMBERS = new Set(
 const logger = pino({ level: process.env.LOG_LEVEL || 'warn' });
 const sessionStore = createSupabaseSessionStore({ logger });
 let sessionSyncTimer;
+let sessionRestoredOnce = false;
 const STARTED_AT = Date.now();
 let DISPLAY_OWNER = process.env.OWNER_NAME || 'HORDAIN MADILA';
 const BOT_VERSION = process.env.BOT_VERSION || '1.0.0 GOLD';
@@ -978,8 +979,11 @@ const server = app.listen(PORT, '0.0.0.0', () => logger.info({ port: PORT }, 'M.
 async function startWhatsApp() {
   if (reconnectTimer) clearTimeout(reconnectTimer);
   await fs.mkdir(SESSION_DIR, { recursive: true, mode: 0o700 });
-  const restored = await sessionStore.restore(SESSION_DIR);
-  if (!restored.enabled) logger.warn('WhatsApp session storage is local-only; configure private Supabase Storage to survive Render restarts.');
+  if (!sessionRestoredOnce) {
+    const restored = await sessionStore.restore(SESSION_DIR);
+    sessionRestoredOnce = true;
+    if (!restored.enabled) logger.warn({ persistence: sessionStore.status }, 'WhatsApp session storage is local-only; configure encrypted private Supabase Storage to survive Render restarts.');
+  }
   const auth = await useMultiFileAuthState(SESSION_DIR);
   authState = auth.state;
   saveCreds = async (...args) => {
