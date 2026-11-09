@@ -703,14 +703,14 @@ for (const alias of MHE_DOWNLOAD_ALIASES) {
     if (alias === 'play' || alias === 'song' || alias === 'ytmp3' || alias === 'video' || alias === 'ytmp4') {
       const kind = ['video', 'ytmp4'].includes(alias) ? 'video' : 'audio';
       let target = input;
-      if (!/^https?:\\/\\//i.test(input)) {
+      if (!/^https?:\/\//i.test(input)) {
         const result = await youtubeSearch(input);
         if (!result) throw new Error('Aucun résultat YouTube trouvé. Essaie une recherche plus précise.');
         target = result.url;
       }
       let parsed;
       try { parsed = new URL(target); } catch { throw new Error('Recherche ou lien YouTube invalide.'); }
-      if (!/(^|\\.)youtube\\.com$|(^|\\.)youtu\\.be$/.test(parsed.hostname.toLowerCase())) {
+      if (!/(^|\.)youtube\.com$|(^|\.)youtu\.be$/.test(parsed.hostname.toLowerCase())) {
         throw new Error('Pour cette commande, fournis une recherche ou un lien YouTube valide.');
       }
       await sendText(chat, (kind === 'audio' ? '🎧 Préparation audio : ' : '🎬 Préparation vidéo : ') + target);
