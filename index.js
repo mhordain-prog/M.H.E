@@ -1102,6 +1102,18 @@ const warningManager = createWarningManager({
   isOwnerNumber: (number) => OWNER_NUMBERS.has(number) || cleanNumber(socket?.user?.id || '') === number,
 });
 
+register('warn', 'GROUPES', 'Avertir un membre (admin, mention ou réponse, avec motif)', async ({ chat, actor, message, args }) => {
+  requireGroup(chat);
+  const context = await groupContext(chat, actor);
+  if (!context.actorIsAdmin) throw new Error('⛔ Cette commande est réservée aux administrateurs du groupe.');
+  const targets = targetJids(message);
+  if (targets.length !== 1) throw new Error('Mentionne un seul membre ou réponds à son message.');
+  const reason = args.join(' ').trim();
+  if (!reason) throw new Error(`Indique le motif : ${PREFIX}warn @membre motif.`);
+  const result = await warningManager.warn({ groupJid: chat, actorJid: targets[0], reason });
+  if (result.skipped) throw new Error('Les administrateurs et propriétaires ne peuvent pas recevoir d’avertissement.');
+});
+
 register('warnings', 'GROUPES', 'Afficher les avertissements actifs d’un membre ou les siens', async ({ chat, actor, message }) => {
   requireGroup(chat);
   const targets = targetJids(message);
