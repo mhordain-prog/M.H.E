@@ -3,6 +3,7 @@ import express from 'express';
 import pino from 'pino';
 import { registerMheGoldV2 } from './core/mhe-gold-v2.js';
 import { createWarningManager } from './core/warnings.js';
+import { createRecentGroupMessages } from './core/recent-group-messages.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import makeWASocket, {
@@ -49,7 +50,7 @@ let pairCooldownUntil = 0;
 const pairIpCooldowns = new Map();
 const PAIR_COOLDOWN_MS = 45_000;
 const commands = new Map();
-const recentGroupMessages = new Map();
+const recentGroupMessages = createRecentGroupMessages();
 let activitySinceSave = 0;
 
 async function loadSettings() {
@@ -1042,10 +1043,7 @@ async function startWhatsApp() {
         group.activityNames ||= {};
         group.activity[actor] = (group.activity[actor] || 0) + 1;
         if (message.pushName) group.activityNames[actor] = message.pushName;
-        const recent = recentGroupMessages.get(groupJid) || [];
-        recent.push(message.key);
-        if (recent.length > 1000) recent.splice(0, recent.length - 1000);
-        recentGroupMessages.set(groupJid, recent);
+        recentGroupMessages.add(groupJid, message.key);
         activitySinceSave += 1;
         if (activitySinceSave >= 10) {
           activitySinceSave = 0;
