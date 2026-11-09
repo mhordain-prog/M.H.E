@@ -3,6 +3,7 @@ import yts from 'yt-search';
 import express from 'express';
 import pino from 'pino';
 import { registerMheGoldV2 } from './core/mhe-gold-v2.js';
+import { createWarningManager } from './core/warnings.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import makeWASocket, {
@@ -44,16 +45,18 @@ let authState;
 let saveCreds;
 let reconnectTimer;
 let mode = process.env.BOT_MODE === 'public' ? 'public' : 'private';
-let settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true, autoreact: true };
+let settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true };
 let pairCooldownUntil = 0;
 const pairIpCooldowns = new Map();
 const PAIR_COOLDOWN_MS = 45_000;
 const commands = new Map();
+const recentGroupMessages = new Map();
+let activitySinceSave = 0;
 
 async function loadSettings() {
   try {
     const parsed = JSON.parse(await fs.readFile(SETTINGS_FILE, 'utf8'));
-    settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, autoread: true, autotyping: true, autoreact: true, ...parsed, groups: parsed.groups || {} };
+    settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true, ...parsed, groups: parsed.groups || {} };
     if (parsed.mode === 'public' || parsed.mode === 'private') mode = parsed.mode;
     if (typeof parsed.prefix === 'string' && parsed.prefix.length > 0 && parsed.prefix.length <= 3) PREFIX = parsed.prefix;
     if (typeof parsed.botname === 'string' && parsed.botname.trim()) BOT_NAME = parsed.botname;
@@ -99,13 +102,28 @@ async function sendText(jid, text, options = {}) {
   if (!socket) throw new Error('WhatsApp socket is not ready');
   return socket.sendMessage(jid, { text, ...options });
 }
+function jidKey(jid = '') {
+  return String(jid).trim().toLowerCase().replace(/:\\d+(?=@)/, '');
+}
+function participantMatchesJid(participant, candidates) {
+  const participantIds = [participant?.id, participant?.jid, participant?.lid, participant?.phoneNumber]
+    .filter(Boolean)
+    .map(jidKey);
+  const candidateIds = candidates.filter(Boolean).map(jidKey);
+  if (participantIds.some((id) => candidateIds.includes(id))) return true;
+
+  const participantNumbers = [participant?.id, participant?.jid, participant?.phoneNumber]
+    .filter(Boolean).map(cleanNumber).filter(Boolean);
+  const candidateNumbers = candidates.filter(Boolean).map(cleanNumber).filter(Boolean);
+  return participantNumbers.some((number) => candidateNumbers.includes(number));
+}
 async function groupContext(jid, actor) {
   const metadata = await socket.groupMetadata(jid);
   const participants = metadata.participants || [];
-  const actorNumber = cleanNumber(actor);
-  const botNumber = cleanNumber(socket.user?.id || '');
-  const actorInfo = participants.find((p) => cleanNumber(p.id) === actorNumber);
-  const botInfo = participants.find((p) => cleanNumber(p.id) === botNumber);
+  const actorIds = [actor];
+  const actorInfo = participants.find((p) => participantMatchesJid(p, actorIds));
+  const botIds = [socket.user?.id, socket.user?.lid, socket.user?.phoneNumber];
+  const botInfo = participants.find((p) => participantMatchesJid(p, botIds));
   return {
     metadata,
     participants,
@@ -117,8 +135,20 @@ function requireGroup(jid) {
   if (!jid.endsWith('@g.us')) throw new Error('Cette commande fonctionne uniquement dans un groupe.');
 }
 function requireAdmin(context) {
-  if (!context.actorIsAdmin) throw new Error('Réservé aux administrateurs du groupe.');
-  if (!context.botIsAdmin) throw new Error('M.H.E. doit être administrateur du groupe pour effectuer cette action.');
+  if (!context.actorIsAdmin) {
+    throw new Error('⛔ Cette commande est réservée aux administrateurs du groupe.');
+  }
+  if (!context.botIsAdmin) {
+    throw new Error(
+      '⚠️ M.H.E-MD GOLD doit être administrateur pour effectuer cette action.\n\n' +
+      'Pour le promouvoir :\n' +
+      '1. Ouvre les informations du groupe.\n' +
+      '2. Va dans la liste des participants.\n' +
+      '3. Sélectionne M.H.E-MD GOLD.\n' +
+      '4. Choisis « Nommer administrateur ».\n\n' +
+      'Puis réessaie la commande.'
+    );
+  }
 }
 function targetJids(message) {
   const targets = mentionedJids(message);
@@ -138,57 +168,62 @@ async function executeCommand(message, commandName, args, isOwner) {
   }
   try {
     await command.handler({ message, chat, actor, args, isOwner });
+    if (settings.autoreact !== false && message.key?.id && socket) {
+      try {
+        await socket.sendMessage(chat, { react: { text: '⚡', key: message.key } });
+      } catch (reactionError) {
+        logger.debug({ err: reactionError, command: commandName }, 'Automatic command reaction failed');
+      }
+    }
   } catch (error) {
     logger.warn({ err: error, command: commandName }, 'Command failed');
     await sendText(chat, `⚠️ ${error.message || 'La commande a échoué.'}`);
   }
 }
 
-register('menu', 'GÉNÉRAL', 'Afficher toutes les commandes enregistrées dans le style GOLD', async ({ chat }) => {
+register('menu', 'GÉNÉRAL', 'Afficher le menu GOLD et les commandes réellement enregistrées', async ({ chat }) => {
   const categories = new Map();
-  // Build the menu at invocation time so commands registered later during startup are included.
   for (const command of commands.values()) {
     if (!categories.has(command.category)) categories.set(command.category, []);
     categories.get(command.category).push(command);
   }
   const lines = [
-    '╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╮',
-    '┃        ✨ GOLDEN BOT SYSTEM ✨       ┃',
-    '┃',
-    `┃ 👑 ${BOT_NAME} 👑`,
-    '┃       ULTRA LUXURY MENU 💎',
-    '┃',
-    `┃ ✨ Welcome • ${DISPLAY_OWNER} ✨`,
-    `┃ ⏱️ Active : ${formatUptime(Date.now() - STARTED_AT)}`,
-    `┃ 🔢 Version : ${BOT_VERSION}`,
-    `┃ ⚡ Commands : ${commands.size} registered`,
-    `┃ 🔰 Prefix : ${PREFIX}   🔒 Mode : ${mode.toUpperCase()}`,
-    '╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯',
+    '╔════════◇◆◇════════╗',
+    '       👑 M.H.E-MD GOLD 👑',
+    '       ✨ GOLDEN BOT SYSTEM ✨',
+    '       ULTRA LUXURY MENU',
+    '╠════════════════════╣',
+    '👑 Propriétaire : ' + DISPLAY_OWNER,
+    '🕒 Date : ' + new Date().toLocaleString('fr-FR'),
+    '⏱️ Uptime : ' + formatUptime(Date.now() - STARTED_AT),
+    '⚡ Version : ' + BOT_VERSION,
+    '📚 Commandes : ' + commands.size,
+    '🔖 Préfixe : ' + PREFIX,
+    '🔒 Mode : ' + mode.toUpperCase(),
+    '╚════════════════════╝',
     '',
   ];
   for (const [category, items] of categories) {
-    lines.push(`╭━━━『 👑 ${category} 👑 』━━━◈`);
-    for (const item of items) {
-      lines.push(`┃ ⚡ ${PREFIX}${item.name}  •  ${item.description}`);
-    }
-    lines.push('╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━◈', '');
+    lines.push('╔═══════ 👑 ' + category + ' 👑 ═══════╗');
+    for (const item of items) lines.push('║ ➣ ' + PREFIX + item.name);
+    lines.push('╚════════════════════════════╝', '');
   }
   lines.push(
-    '✨ POWERED BY M.H.E-MD GOLD ✨',
-    'Elite • Gold Edition • Pairing-code connection',
-    'Type ' + PREFIX + 'menu to reopen.',
-    'Le compteur correspond aux commandes réellement enregistrées au démarrage.',
+    '╔══════════ ABOUT MHE ══════════╗',
+    '💛 M.H.E-MD GOLD — Gold Luxury Edition',
+    '👑 Creator : ' + DISPLAY_OWNER,
+    '⚡ Rapide • Fiable • Multifonction',
+    '╚════════════════════════════════╝'
   );
   const menuText = lines.join('\n');
-  // Use the connected WhatsApp account's profile photo automatically when available.
+  // Envoie la photo de profil WhatsApp du bot avec le menu en légende.
   try {
-    const botJid = socket?.user?.id;
+    const botJid = socket && socket.user && socket.user.id;
     if (!botJid) throw new Error('WhatsApp profile is not ready');
     const profileUrl = await socket.profilePictureUrl(botJid, 'image');
-    if (!profileUrl) throw new Error('No profile picture configured');
     await socket.sendMessage(chat, { image: { url: profileUrl }, caption: menuText });
   } catch (error) {
-    logger.info({ err: error }, 'Bot profile photo unavailable; sending text menu');
+    logger.info({ err: error }, 'Profile image unavailable; sending text menu');
     await sendText(chat, menuText);
   }
 });
@@ -251,6 +286,74 @@ for (const feature of ['welcome', 'goodbye']) {
 
 
 
+register('actifs', 'GROUPES', 'Classement des membres actifs ou statistiques d’un membre', async ({ chat, message, args }) => {
+  requireGroup(chat);
+  const group = getGroupSettings(chat);
+  const activity = group.activity || {};
+  const names = group.activityNames || {};
+  const requestedTargets = targetJids(message);
+  const requestedNumber = Number.parseInt(args[0], 10);
+  const limit = Number.isInteger(requestedNumber) && requestedNumber > 0
+    ? Math.min(requestedNumber, 50)
+    : 10;
+
+  // .actifs @membre (ou en répondant à son message) affiche ses statistiques.
+  if (requestedTargets.length) {
+    const target = requestedTargets[0];
+    const count = Number(activity[target] || 0);
+    if (count === 0) {
+      await sendText(chat, `📊 @${cleanNumber(target)} n’a pas encore de messages enregistrés par M.H.E.`, { mentions: [target] });
+      return;
+    }
+    await sendText(chat, `╭───〔 📊 STATS ACTIFS 〕───╮\n👤 Membre : @${cleanNumber(target)}\n💬 Messages comptés : ${count}\n╰────────────────────────╯`, { mentions: [target] });
+    return;
+  }
+
+  const top = Object.entries(activity)
+    .filter(([jid, count]) => jid && Number(count) > 0)
+    .sort((a, b) => Number(b[1]) - Number(a[1]))
+    .slice(0, limit);
+  if (!top.length) {
+    await sendText(chat, '📊 Pas encore de statistiques. M.H.E compte les messages reçus dans le groupe à partir de son démarrage.');
+    return;
+  }
+
+  // Enregistre les compteurs avant d’envoyer le classement.
+  await saveSettings();
+  const mentions = top.map(([jid]) => jid);
+  const lines = ['╭───〔 🏆 M.H.E-MD GOLD — ACTIFS 〕───╮'];
+  top.forEach(([jid, count], index) => {
+    const medal = ['🥇', '🥈', '🥉'][index] || `${index + 1}.`;
+    lines.push(`${medal} @${cleanNumber(jid)} — ${count} message(s)`);
+  });
+  lines.push('╰────────────────────────────────╯', `👥 Membres affichés : ${top.length}`, '📌 Statistiques enregistrées dans les paramètres du bot.');
+  await sendText(chat, lines.join('\n'), { mentions });
+});
+register('delall', 'GROUPES', 'Supprimer les messages récents suivis d’un membre non-administrateur (mention ou réponse)', async ({ chat, actor, message }) => {
+  requireGroup(chat);
+  const context = await groupContext(chat, actor);
+  requireAdmin(context);
+  const targets = targetJids(message);
+  if (targets.length !== 1) throw new Error('Mentionne une seule personne ou réponds à son message.');
+  const target = targets[0];
+  const targetInfo = context.participants.find((p) => cleanNumber(p.id) === cleanNumber(target));
+  if (!targetInfo) throw new Error('Ce membre n’est pas dans le groupe.');
+  if (targetInfo.admin || targetInfo.isAdmin || targetInfo.isSuperAdmin) throw new Error('Par sécurité, .delall ne cible pas un administrateur du groupe.');
+  const tracked = recentGroupMessages.get(chat) || [];
+  const matches = tracked.filter((key) => cleanNumber(key.participant || '') === cleanNumber(target));
+  if (!matches.length) throw new Error('Aucun message récent de cette personne n’est suivi depuis le démarrage du bot.');
+  let deleted = 0;
+  for (const key of matches.slice(-100)) {
+    try {
+      await socket.sendMessage(chat, { delete: key });
+      deleted += 1;
+    } catch (error) {
+      logger.debug({ err: error, group: chat }, 'Could not delete a tracked group message');
+    }
+  }
+  await sendText(chat, `🗑️ Suppression terminée : ${deleted}/${Math.min(matches.length, 100)} message(s) suivi(s) de @${cleanNumber(target)}.`, { mentions: [target] });
+});
+
 const MHE_GROUP_GOLD_ALIASES = [
   'mhe-group', 'everyone', 'hidetag', 'tag',
   'add', 'mute', 'unmute', 'link', 'revoke', 'ginfo', 'gcinfo', 'gcstatus',
@@ -311,6 +414,20 @@ register('revoke', 'GROUPES', 'Révoquer le lien d’invitation', async ({ chat,
   await socket.groupRevokeInvite(chat);
   const code = await socket.groupInviteCode(chat);
   await sendText(chat, `✅ Ancien lien révoqué. Nouveau lien : https://chat.whatsapp.com/${code}`);
+});
+register('groupe', 'GROUPES', 'Vérifier le statut administrateur de M.H.E : .groupe statut', async ({ chat, actor, args }) => {
+  requireGroup(chat);
+  if ((args[0] || '').toLowerCase() !== 'statut') {
+    throw new Error(`Utilise ${PREFIX}groupe statut.`);
+  }
+  const context = await groupContext(chat, actor);
+  const botStatus = context.botIsAdmin
+    ? '✅ M.H.E-MD GOLD est administrateur du groupe.'
+    : '⚠️ M.H.E-MD GOLD n’est pas administrateur du groupe. Un administrateur doit le promouvoir dans les informations du groupe.';
+  const actorStatus = context.actorIsAdmin
+    ? '✅ Tu es administrateur du groupe.'
+    : 'ℹ️ Ton compte n’est pas administrateur du groupe.';
+  await sendText(chat, `╭┈───〔 M.H.E ADMIN CHECK 〕┈───⊷\n${botStatus}\n${actorStatus}\n╰━━━━━━━━━━━━━━━━━━━━⊷`);
 });
 for (const alias of ['ginfo', 'gcinfo', 'gcstatus']) {
   register(alias, 'GROUPES', 'Afficher les informations du groupe', async ({ chat }) => {
@@ -519,7 +636,7 @@ for (const alias of ['setwelcome', 'setgoodbye']) {
     await sendText(chat, `✅ Texte ${alias} enregistré.`);
   }, true);
 }
-for (const alias of ['antilink','antidelete','antitag','antistatusmention','antiedit','anticall','autoread','autotype','autotyping','autoreact','recording','online','statusview','statuslike','adminaction']) {
+for (const alias of ['antilink','antispam','antidelete','antitag','antistatusmention','antiedit','anticall','autoread','autotype','autotyping','autoreact','recording','online','statusview','statuslike','adminaction']) {
   register(alias, 'PROPRIÉTAIRE', 'Modifier un réglage du bot', async ({ chat, args, isOwner }) => {
     requireOwner(isOwner);
     const state = (args[0] || '').toLowerCase();
@@ -960,6 +1077,44 @@ async function startWhatsApp() {
       const actorNumber = cleanNumber(actor);
       const blocked = (settings.banned || []).some((item) => cleanNumber(item) === actorNumber);
       if (blocked && !message.key.fromMe) continue;
+      if (message.key.remoteJid?.endsWith('@g.us') && !message.key.fromMe) {
+        const groupJid = message.key.remoteJid;
+        const group = getGroupSettings(groupJid);
+        group.activity ||= {};
+        group.activityNames ||= {};
+        group.activity[actor] = (group.activity[actor] || 0) + 1;
+        if (message.pushName) group.activityNames[actor] = message.pushName;
+        const recent = recentGroupMessages.get(groupJid) || [];
+        recent.push(message.key);
+        if (recent.length > 1000) recent.splice(0, recent.length - 1000);
+        recentGroupMessages.set(groupJid, recent);
+        activitySinceSave += 1;
+        if (activitySinceSave >= 10) {
+          activitySinceSave = 0;
+          saveSettings().catch((error) => logger.warn({ err: error }, 'Could not persist group activity'));
+        }
+      }
+      if (message.key.remoteJid?.endsWith('@g.us') && !message.key.fromMe) {
+        const groupJid = message.key.remoteJid;
+        const actorJid = senderJid(message);
+        const isStatusMention = Boolean(message.message?.groupStatusMentionMessage);
+        const mentionCount = message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length || 0;
+        const isMassTag = mentionCount >= 5;
+        const isLink = /(?:https?:\/\/|www\.|chat\.whatsapp\.com\/|wa\.me\/|t\.me\/|bit\.ly\/|(?:^|[\s([<{])(?:[a-z0-9-]+\.)+(?:com|net|org|io|co|me|app|dev|gg|xyz|info|site|online|ru|fr|cg|uk|us)(?:\b|\/))/i.test(text);
+        let reason = '';
+        if (settings.antistatusmention && isStatusMention) reason = 'Mention de statut interdite';
+        else if (settings.antitag && isMassTag) reason = 'Mention massive interdite';
+        else if (settings.antilink && isLink) reason = 'Lien interdit';
+        else if (settings.antispam && warningManager.detectSpam(groupJid, actorJid)) reason = 'Spam / messages répétés';
+        if (reason) {
+          try {
+            await warningManager.warn({ groupJid, actorJid, reason });
+          } catch (error) {
+            logger.warn({ err: error, group: groupJid }, 'Could not issue group warning');
+          }
+          continue;
+        }
+      }
       if (await handleMheGoldIncoming(message, { mode })) continue;
       if (!text.startsWith(PREFIX)) continue;
       const [name, ...args] = text.slice(PREFIX.length).trim().split(/\s+/);
@@ -992,6 +1147,32 @@ const handleMheGoldIncoming = registerMheGoldV2({
   getSocket: () => socket,
   getPrefix: () => PREFIX,
 });
+const warningManager = createWarningManager({
+  sendText,
+  getSocket: () => socket,
+  getGroupSettings,
+  isOwnerNumber: (number) => OWNER_NUMBERS.has(number) || cleanNumber(socket?.user?.id || '') === number,
+});
+
+register('warnings', 'GROUPES', 'Afficher les avertissements actifs d’un membre ou les siens', async ({ chat, actor, message }) => {
+  requireGroup(chat);
+  const targets = targetJids(message);
+  const target = targets[0] || actor;
+  const entries = await warningManager.getWarnings(chat, target);
+  const lines = entries.map((entry, index) => `${index + 1}. ${entry.reason} — ${new Date(entry.at).toLocaleDateString('fr-FR')}`);
+  await sendText(chat, `⚠️ Avertissements de @${cleanNumber(target)} : ${entries.length}/3 actifs sur 30 jours.${lines.length ? '\n' + lines.join('\n') : '\nAucun avertissement actif.'}`, { mentions: [target] });
+});
+
+register('resetwarn', 'GROUPES', 'Réinitialiser les avertissements d’un membre (administrateur du groupe)', async ({ chat, actor, message }) => {
+  requireGroup(chat);
+  const context = await groupContext(chat, actor);
+  if (!context.actorIsAdmin) throw new Error('⛔ Cette commande est réservée aux administrateurs du groupe.');
+  const targets = targetJids(message);
+  if (targets.length !== 1) throw new Error('Mentionne un seul membre ou réponds à son message.');
+  await warningManager.resetWarnings(chat, targets[0]);
+  await sendText(chat, `✅ Les avertissements de @${cleanNumber(targets[0])} ont été réinitialisés.`, { mentions: targets });
+});
+
 await startWhatsApp().catch((error) => logger.error({ err: error }, 'WhatsApp startup failed'));
 process.on('SIGTERM', async () => {
   server.close();
