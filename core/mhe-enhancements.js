@@ -8,6 +8,20 @@ function duration(ms) {
   return [days ? `${days}d` : '', hours ? `${hours}h` : '', minutes ? `${minutes}m` : '', `${seconds % 60}s`].filter(Boolean).join(' ');
 }
 
+function displayCategory(category) {
+  const labels = {
+    'GÉNÉRAL': 'GENERAL',
+    'PROPRIÉTAIRE': 'OWNER',
+    'GROUPES': 'GROUPS',
+    'TEXTE': 'TEXT',
+    'TEXTE / POLICES': 'TEXT / FONTS',
+    'TÉLÉCHARGEMENT': 'DOWNLOADS',
+    'OUTILS': 'TOOLS',
+    'M.H.E GOLD V2': 'AI & GOLD V2',
+  };
+  return labels[category] || String(category).normalize('NFD').replace(/\\p{Diacritic}/gu, '').toUpperCase();
+}
+
 function getCategories(commands) {
   const categories = new Map();
   for (const command of commands.values()) {
@@ -128,7 +142,7 @@ export function registerMheEnhancements({
     } catch {}
     if (!sentImage) await sendText(chat, caption);
     const rows = categories.slice(0, 10).map(([category, items], index) => ({
-      title: String(category).slice(0, 24),
+      title: displayCategory(category).slice(0, 24),
       description: `${items.length} command(s) — open category`.slice(0, 72),
       rowId: `mhecat:${index}`,
     }));
@@ -218,6 +232,18 @@ export function registerMheEnhancements({
     await sendText(chat, await wikipediaSearch(query));
   });
 
+  for (const [alias, target, description] of [
+    ['setprefix', 'prefix', 'Change the command prefix'],
+    ['setbotname', 'botname', 'Change the bot display name'],
+    ['setownername', 'ownername', 'Change the displayed owner name'],
+  ]) {
+    register(alias, 'OWNER', description, async (context) => {
+      const command = commands.get(target);
+      if (!command) throw new Error('Target command is unavailable.');
+      await command.handler(context);
+    }, true);
+  }
+
   settings.todos ||= {};
   register('todo', 'PRODUCTIVITY', 'Manage your personal task list: add, list, done, clear', async ({ chat, actor, args }) => {
     const action = (args[0] || 'list').toLowerCase();
@@ -303,6 +329,17 @@ export function registerMheEnhancements({
       return `${index + 1}. ${role} @${String(item.id || '').split('@')[0].split(':')[0]}`;
     });
     await sendText(chat, `👥 MEMBERS — ${metadata.subject || 'GROUP'}\nShowing ${participants.length} of ${metadata.participants?.length || 0}\n\n${lines.join('\n')}`, { mentions });
+  });
+
+  register('admins', 'GROUPS', 'List administrators of the current group', async ({ chat }) => {
+    requireGroup(chat);
+    const metadata = await getSocket().groupMetadata(chat);
+    const admins = (metadata.participants || []).filter((item) => item.admin || item.isAdmin || item.isSuperAdmin);
+    const mentions = admins.map((item) => item.id).filter(Boolean);
+    const lines = admins.map((item, index) => `${index + 1}. 👑 @${String(item.id || '').split('@')[0].split(':')[0]}`);
+    await sendText(chat, lines.length
+      ? `👑 GROUP ADMINS — ${metadata.subject || 'GROUP'}\\n\\n${lines.join('\\n')}`
+      : 'No group administrators were returned by WhatsApp.', { mentions });
   });
 
   register('setrules', 'GROUPS', 'Set the rules for this group (admins only)', async ({ chat, actor, args }) => {
