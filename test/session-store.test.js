@@ -5,17 +5,20 @@ import os from 'node:os';
 import path from 'node:path';
 import { createSupabaseSessionStore } from '../core/session-store.js';
 
+const encryptionKey = Buffer.alloc(32, 7).toString('base64');
+
 test('session store stays local-only when Supabase credentials are absent', async () => {
-  const store = createSupabaseSessionStore({ url: '', serviceKey: '' });
+  const store = createSupabaseSessionStore({ url: '', serviceKey: '', encryptionKey: '' });
   assert.equal(store.enabled, false);
   assert.equal(store.status, 'local-only');
   assert.deepEqual(await store.restore('/tmp/mhe-unused'), { enabled: false, restored: 0 });
   assert.deepEqual(await store.sync('/tmp/mhe-unused'), { enabled: false, uploaded: 0 });
 });
 
-test('session store restores, uploads changed JSON files, and clears only its prefix', async () => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mhe-session-'));
-  const objects = new Map([['mhe/creds.json', Buffer.from('{"registered":true}')]]);
+test('session store encrypts, restores, uploads changed files, and clears only its prefix', async () => {
+  const sourceDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mhe-session-source-'));
+  const restoredDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mhe-session-restored-'));
+  const objects = new Map();
 
   const fetchImpl = async (url, options = {}) => {
     const route = new URL(url).pathname.replace('/storage/v1', '');
@@ -38,32 +41,45 @@ test('session store restores, uploads changed JSON files, and clears only its pr
   };
 
   try {
-    const store = createSupabaseSessionStore({
+    const options = {
       url: 'https://example.supabase.co',
       serviceKey: 'test-service-role-key',
+      encryptionKey,
       fetchImpl,
       logger: { info() {} },
-    });
-    const restored = await store.restore(directory);
-    assert.equal(restored.restored, 1);
-    assert.equal(await fs.readFile(path.join(directory, 'creds.json'), 'utf8'), '{"registered":true}');
-
-    await fs.writeFile(path.join(directory, 'creds.json'), '{"registered":false}');
-    const synced = await store.sync(directory);
+    };
+    const store = createSupabaseSessionStore(options);
+    await fs.writeFile(path.join(sourceDir, 'creds.json'), '{"registered":true}');
+    const synced = await store.sync(sourceDir);
     assert.equal(synced.uploaded, 1);
-    assert.equal(objects.get('mhe/creds.json').toString(), '{"registered":false}');
+    assert.equal(objects.get('mhe/creds.json').subarray(0, 4).toString(), 'MHE1');
+    assert.equal(objects.get('mhe/creds.json').toString().includes('registered'), false);
+
+    const restoredStore = createSupabaseSessionStore(options);
+    const restored = await restoredStore.restore(restoredDir);
+    assert.equal(restored.restored, 1);
+    assert.equal(await fs.readFile(path.join(restoredDir, 'creds.json'), 'utf8'), '{"registered":true}');
+
+    await fs.writeFile(path.join(sourceDir, 'creds.json'), '{"registered":false,"changed":true}');
+    const changed = await store.sync(sourceDir);
+    assert.equal(changed.uploaded, 1);
 
     const cleared = await store.clear();
     assert.equal(cleared.deleted, 1);
     assert.equal(objects.size, 0);
   } finally {
-    await fs.rm(directory, { recursive: true, force: true });
+    await fs.rm(sourceDir, { recursive: true, force: true });
+    await fs.rm(restoredDir, { recursive: true, force: true });
   }
 });
 
-test('session store rejects non-HTTPS remote endpoints', () => {
+test('session store rejects non-HTTPS remote endpoints and invalid encryption keys', () => {
   assert.throws(
-    () => createSupabaseSessionStore({ url: 'http://storage.example.com', serviceKey: 'secret' }),
+    () => createSupabaseSessionStore({ url: 'http://storage.example.com', serviceKey: 'secret', encryptionKey }),
     /must use HTTPS/,
+  );
+  assert.throws(
+    () => createSupabaseSessionStore({ url: 'https://example.supabase.co', serviceKey: 'secret', encryptionKey: 'bad' }),
+    /32-byte key/,
   );
 });
