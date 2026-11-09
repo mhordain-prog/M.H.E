@@ -236,6 +236,7 @@ export function registerMheEnhancements({
     ['setprefix', 'prefix', 'Change the command prefix'],
     ['setbotname', 'botname', 'Change the bot display name'],
     ['setownername', 'ownername', 'Change the displayed owner name'],
+    ['setmode', 'mode', 'Set bot access mode: private or public'],
   ]) {
     register(alias, 'OWNER', description, async (context) => {
       const command = commands.get(target);
