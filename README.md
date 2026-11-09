@@ -6,7 +6,7 @@ M.H.E-MD GOLD is a WhatsApp multi-device bot project. It uses pairing codes only
 
 The GOLD menu uses the registered command handlers dynamically: every command registered during startup is listed by category, and the count reflects the actual registry rather than an unverified total from another bot.
 
-- General: `.menu`, `.help`, `.ping`, `.alive`, `.owner`, `.uptime`, `.botinfo`, `.chatid`
+- General: `.menu`, `.help`, `.ping`, `.alive`, `.diag`, `.owner`, `.uptime`, `.botinfo`, `.chatid`
 - Text/fun: `.reverse`, `.choose`, `.dice`, `.coin`
 - Fonts: `.font 1 ton texte` et `.font1` à `.font12` (12 transformations Unicode réellement codées)
 - Tools: `.fancy`, `.hashtag`, `.boost`, `.flag` et les alias image `.remini`, `.removebg`, `.blur`, etc. Les transformations texte sont implémentées; les traitements d'image et captures nécessitent encore un fournisseur externe configuré.
@@ -50,7 +50,7 @@ This repository is not yet a complete copy of every command shown by Erfan MD. T
 
 ## Next command batch
 
-Implemented in source (runtime deployment not yet verified): uptime, bot info, chat ID, text reversal, random choice, dice and coin toss. These are local utilities and do not require third-party API credentials.
+Implemented in source (runtime deployment not yet verified): `.diag` (WhatsApp connection, process uptime, Node runtime, registered-command count and process memory), uptime, bot info, chat ID, text reversal, random choice, dice and coin toss. These are local utilities and do not require third-party API credentials.
 
 ## M.H.E GOLD V2 — branche de fonctionnalité
 

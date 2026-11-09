@@ -4,6 +4,7 @@ import pino from 'pino';
 import { registerMheGoldV2 } from './core/mhe-gold-v2.js';
 import { createWarningManager } from './core/warnings.js';
 import { createRecentGroupMessages } from './core/recent-group-messages.js';
+import { buildDiagnosticReport } from './core/diagnostics.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import makeWASocket, {
@@ -235,6 +236,15 @@ register('ping', 'GÉNÉRAL', 'Vérifier si le bot répond', async ({ chat }) =>
 });
 register('alive', 'GÉNÉRAL', 'État du bot', async ({ chat }) => {
   await sendText(chat, `✅ ${BOT_NAME} est démarré. Mode : ${mode}. Commandes actives : ${commands.size}.`);
+});
+register('diag', 'GÉNÉRAL', 'Diagnostic local : connexion, runtime, commandes et mémoire', async ({ chat }) => {
+  await sendText(chat, buildDiagnosticReport({
+    nodeVersion: process.version,
+    uptimeSeconds: (Date.now() - STARTED_AT) / 1000,
+    whatsappConnected: Boolean(socket?.user?.id),
+    commandCount: commands.size,
+    memory: process.memoryUsage(),
+  }));
 });
 register('owner', 'GÉNÉRAL', 'Afficher le propriétaire connecté', async ({ chat }) => {
   const owner = cleanNumber(socket?.user?.id || '');
