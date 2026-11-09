@@ -21,7 +21,7 @@ function setup() {
 
 test('registers the enhanced menu and useful English command families', () => {
   const { commands } = setup();
-  for (const name of ['menu', 'menucat', 'searchcmd', 'stats', 'time', 'date', 'weather', 'wiki', 'todo', 'note', 'groupinfo', 'members', 'setrules', 'rules']) {
+  for (const name of ['menu', 'menucat', 'searchcmd', 'stats', 'time', 'date', 'weather', 'wiki', 'todo', 'note', 'groupinfo', 'members', 'setrules', 'rules', 'admins', 'setprefix', 'setbotname', 'setownername']) {
     assert.ok(commands.has(name), name);
   }
 });
