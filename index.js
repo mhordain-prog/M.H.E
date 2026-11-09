@@ -5,6 +5,7 @@ import { registerMheGoldV2 } from './core/mhe-gold-v2.js';
 import { registerMheEnhancements } from './core/mhe-enhancements.js';
 import { registerControlCenter } from './core/control-center.js';
 import { createWarningManager } from './core/warnings.js';
+import { createSupabaseSessionStore } from './core/session-store.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import makeWASocket, {
@@ -25,6 +26,8 @@ const OWNER_NUMBERS = new Set(
     .filter(Boolean),
 );
 const logger = pino({ level: process.env.LOG_LEVEL || 'warn' });
+const sessionStore = createSupabaseSessionStore({ logger });
+let sessionSyncTimer;
 const STARTED_AT = Date.now();
 let DISPLAY_OWNER = process.env.OWNER_NAME || 'HORDAIN MADILA';
 const BOT_VERSION = process.env.BOT_VERSION || '1.0.0 GOLD';
@@ -939,6 +942,7 @@ app.get('/health', (_req, res) => {
     registered: Boolean(authState?.creds?.registered),
     commands: commands.size,
     mode,
+    sessionPersistence: sessionStore.status,
   });
 });
 app.post('/api/pair', async (req, res) => {
@@ -973,10 +977,22 @@ const server = app.listen(PORT, '0.0.0.0', () => logger.info({ port: PORT }, 'M.
 
 async function startWhatsApp() {
   if (reconnectTimer) clearTimeout(reconnectTimer);
-  await fs.mkdir(SESSION_DIR, { recursive: true });
+  await fs.mkdir(SESSION_DIR, { recursive: true, mode: 0o700 });
+  const restored = await sessionStore.restore(SESSION_DIR);
+  if (!restored.enabled) logger.warn('WhatsApp session storage is local-only; configure private Supabase Storage to survive Render restarts.');
   const auth = await useMultiFileAuthState(SESSION_DIR);
   authState = auth.state;
-  saveCreds = auth.saveCreds;
+  saveCreds = async (...args) => {
+    await auth.saveCreds(...args);
+    try { await sessionStore.sync(SESSION_DIR); }
+    catch (error) { logger.error({ err: error }, 'WhatsApp session backup failed'); }
+  };
+  if (sessionStore.enabled && !sessionSyncTimer) {
+    sessionSyncTimer = setInterval(() => {
+      sessionStore.sync(SESSION_DIR).catch((error) => logger.error({ err: error }, 'WhatsApp session backup failed'));
+    }, 15_000);
+    sessionSyncTimer.unref?.();
+  }
   const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
   socket = makeWASocket({
     auth: authState,
@@ -1003,7 +1019,8 @@ async function startWhatsApp() {
           try {
             // SESSION_DIR may be a mounted Railway volume root; never remove
             // the mount point itself (EBUSY). Clear only its contents.
-            await fs.mkdir(SESSION_DIR, { recursive: true });
+            await sessionStore.clear();
+            await fs.mkdir(SESSION_DIR, { recursive: true, mode: 0o700 });
             const entries = await fs.readdir(SESSION_DIR);
             await Promise.all(entries.map((entry) =>
               fs.rm(path.join(SESSION_DIR, entry), { recursive: true, force: true })
@@ -1155,6 +1172,8 @@ registerMheEnhancements({
 await startWhatsApp().catch((error) => logger.error({ err: error }, 'WhatsApp startup failed'));
 process.on('SIGTERM', async () => {
   server.close();
+  if (sessionSyncTimer) clearInterval(sessionSyncTimer);
+  try { await sessionStore.sync(SESSION_DIR); } catch (error) { logger.error({ err: error }, 'Final WhatsApp session backup failed'); }
   try { socket?.end(undefined); } catch {}
   process.exit(0);
 });
