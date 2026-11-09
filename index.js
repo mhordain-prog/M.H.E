@@ -3,6 +3,7 @@ import express from 'express';
 import pino from 'pino';
 import { registerMheGoldV2 } from './core/mhe-gold-v2.js';
 import { registerMheEnhancements } from './core/mhe-enhancements.js';
+import { registerControlCenter } from './core/control-center.js';
 import { createWarningManager } from './core/warnings.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -50,6 +51,11 @@ let pairCooldownUntil = 0;
 const pairIpCooldowns = new Map();
 const PAIR_COOLDOWN_MS = 45_000;
 const commands = new Map();
+registerControlCenter({
+  app, commands, getSocket: () => socket, getMode: () => mode,
+  getPrefix: () => PREFIX, getOwnerName: () => DISPLAY_OWNER,
+  getStartedAt: () => STARTED_AT,
+});
 const recentGroupMessages = new Map();
 let activitySinceSave = 0;
 
