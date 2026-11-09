@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
 const JSON_FILE = /^[a-zA-Z0-9._-]+\.json$/;
 
@@ -10,12 +11,16 @@ function encodeObjectPath(value) {
 export function createSupabaseSessionStore({
   url = process.env.SUPABASE_URL,
   serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY,
+  encryptionKey = process.env.MHE_SESSION_ENCRYPTION_KEY,
   bucket = process.env.MHE_SESSION_BUCKET || 'mhe-sessions',
   prefix = process.env.MHE_SESSION_PREFIX || 'mhe/',
   fetchImpl = globalThis.fetch,
   logger = console,
 } = {}) {
-  const configured = Boolean(url && serviceKey);
+  const configured = Boolean(url && serviceKey && encryptionKey);
+  const partiallyConfigured = Boolean(url || serviceKey || encryptionKey);
+  const key = configured ? Buffer.from(encryptionKey, 'base64') : null;
+  if (configured && key.length !== 32) throw new Error('MHE_SESSION_ENCRYPTION_KEY must be a base64-encoded 32-byte key.');
   let baseUrl = '';
   if (configured) {
     const parsed = new URL(url);
@@ -30,6 +35,22 @@ export function createSupabaseSessionStore({
   const normalizedPrefix = prefix.replace(/^\/+|\/+$/g, '') + '/';
   const fingerprints = new Map();
   let syncPromise;
+
+  function encrypt(data) {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', key, iv);
+    const encrypted = Buffer.concat([cipher.update(data), cipher.final()]);
+    return Buffer.concat([Buffer.from('MHE1'), iv, cipher.getAuthTag(), encrypted]);
+  }
+
+  function decrypt(data) {
+    if (data.length < 32 || data.subarray(0, 4).toString() !== 'MHE1') {
+      throw new Error('Remote WhatsApp session file has an invalid encrypted format.');
+    }
+    const decipher = createDecipheriv('aes-256-gcm', key, data.subarray(4, 16));
+    decipher.setAuthTag(data.subarray(16, 32));
+    return Buffer.concat([decipher.update(data.subarray(32)), decipher.final()]);
+  }
 
   function headers(extra = {}) {
     return {
@@ -72,7 +93,7 @@ export function createSupabaseSessionStore({
     for (const name of names) {
       const objectPath = encodeObjectPath(`${normalizedPrefix}${name}`);
       const response = await request(`/object/authenticated/${encodeURIComponent(bucket)}/${objectPath}`);
-      const data = Buffer.from(await response.arrayBuffer());
+      const data = decrypt(Buffer.from(await response.arrayBuffer()));
       const target = path.join(directory, name);
       await fs.writeFile(target, data, { mode: 0o600 });
       const stat = await fs.stat(target);
@@ -100,8 +121,8 @@ export function createSupabaseSessionStore({
         const objectPath = encodeObjectPath(`${normalizedPrefix}${entry.name}`);
         await request(`/object/${encodeURIComponent(bucket)}/${objectPath}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-upsert': 'true' },
-          body: data,
+          headers: { 'Content-Type': 'application/octet-stream', 'x-upsert': 'true' },
+          body: encrypt(data),
         });
         fingerprints.set(entry.name, fingerprint);
         uploaded += 1;
@@ -114,6 +135,7 @@ export function createSupabaseSessionStore({
 
   async function clear() {
     if (!configured) return { enabled: false, deleted: 0 };
+    if (syncPromise) await syncPromise;
     const names = await listRemote();
     if (!names.length) {
       fingerprints.clear();
@@ -131,7 +153,7 @@ export function createSupabaseSessionStore({
 
   return {
     enabled: configured,
-    status: configured ? 'remote-private-storage' : 'local-only',
+    status: configured ? 'remote-encrypted-storage' : partiallyConfigured ? 'local-only-missing-storage-or-encryption-secret' : 'local-only',
     restore,
     sync,
     clear,
