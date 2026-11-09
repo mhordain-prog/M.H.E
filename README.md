@@ -75,3 +75,18 @@ Variables secrètes pour la voix synthétique :
 N’ajoute jamais les clés API au dépôt. Les messages envoyés à l’assistant IA quittent WhatsApp et sont transmis au fournisseur configuré; n’active cette fonction que si cela convient aux personnes qui l’utilisent. La commande vocale reste indisponible tant qu’un modèle TTS actuellement pris en charge n’est pas configuré. Vérifie la documentation du fournisseur avant l’activation en production.
 
 Ces changements sont en cours de revue dans une pull request. Ils ne sont pas encore fusionnés ni déclarés déployés.
+
+
+## GOLD Command Center — interactive menu and English utilities
+
+The `feature/mhe-gold-ultimate-menu` branch adds a category selector to `.menu` using Baileys interactive list messages, with a text fallback for clients that do not support the interactive payload. Selecting a category opens its live command list from the command registry. The message handler accepts list, button, and template-button response IDs for category navigation.
+
+New commands in this branch:
+
+- General/system: `.menucat`, `.searchcmd`, `.stats`
+- Utilities: `.time [IANA timezone]`, `.date [IANA timezone]`
+- Search: `.weather <city>` (Open-Meteo), `.wiki <topic>` (French Wikipedia)
+- Productivity: `.todo add|list|done|clear`, `.note save|list|delete`
+- Groups: `.groupinfo`, `.members`, `.setrules`, `.rules`
+
+Task lists and notes are stored separately per WhatsApp sender in the existing settings file. Limits are applied to prevent unbounded growth. Weather and encyclopedia lookups use fixed public API hosts and request timeouts. These additions do not require new API keys. They are source changes only until tests pass and a deployment is performed.
