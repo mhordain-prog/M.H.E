@@ -201,45 +201,47 @@ register('menu', 'GÉNÉRAL', 'Afficher le menu GOLD et les commandes réellemen
     if (!categories.has(command.category)) categories.set(command.category, []);
     categories.get(command.category).push(command);
   }
-  const lines = [
-    '╔════════◇◆◇════════╗',
+
+  const headerLines = [
+    '╔════════════════════════════╗',
     '       👑 M.H.E-MD GOLD 👑',
-    '       ✨ GOLDEN BOT SYSTEM ✨',
+    '       GOLDEN BOT SYSTEM',
     '       ULTRA LUXURY MENU',
-    '╠════════════════════╣',
-    '👑 Propriétaire : ' + DISPLAY_OWNER,
-    '🕒 Date : ' + new Date().toLocaleString('fr-FR'),
-    '⏱️ Uptime : ' + formatUptime(Date.now() - STARTED_AT),
-    '⚡ Version : ' + BOT_VERSION,
-    '📚 Commandes : ' + commands.size,
-    '🔖 Préfixe : ' + PREFIX,
-    '🔒 Mode : ' + mode.toUpperCase(),
-    '╚════════════════════╝',
-    '',
+    '╠════════════════════════════╣',
+    '👑 OWNER : ' + DISPLAY_OWNER,
+    '⚡ VERSION : ' + BOT_VERSION,
+    '⏱️ UPTIME : ' + formatUptime(Date.now() - STARTED_AT),
+    '📚 COMMANDS : ' + commands.size,
+    '🔖 PREFIX : ' + PREFIX,
+    '🔒 MODE : ' + mode.toUpperCase(),
+    '╚════════════════════════════╝',
+    'Select a category below to browse commands.'
   ];
+  const headerText = headerLines.join('\n');
+
+  // Keep the image caption short: WhatsApp captions have a much smaller limit
+  // than regular text messages. Send the complete command list separately.
+  const commandLines = [];
   for (const [category, items] of categories) {
-    lines.push('╔═══════ 👑 ' + category + ' 👑 ═══════╗');
-    for (const item of items) lines.push('║ ➣ ' + PREFIX + item.name);
-    lines.push('╚════════════════════════════╝', '');
+    commandLines.push('╔══════ 👑 ' + category + ' 👑 ══════╗');
+    for (const item of items) commandLines.push('➣ ' + PREFIX + item.name);
+    commandLines.push('');
   }
-  lines.push(
-    '╔══════════ ABOUT MHE ══════════╗',
-    '💛 M.H.E-MD GOLD — Gold Luxury Edition',
-    '👑 Creator : ' + DISPLAY_OWNER,
-    '⚡ Rapide • Fiable • Multifonction',
-    '╚════════════════════════════════╝'
-  );
-  const menuText = lines.join('\n');
-  // Envoie la photo de profil WhatsApp du bot avec le menu en légende.
+  const commandText = commandLines.join('\n').trim();
+
+  let imageSent = false;
   try {
     const botJid = socket && socket.user && socket.user.id;
     if (!botJid) throw new Error('WhatsApp profile is not ready');
     const profileUrl = await socket.profilePictureUrl(botJid, 'image');
-    await socket.sendMessage(chat, { image: { url: profileUrl }, caption: menuText });
+    await socket.sendMessage(chat, { image: { url: profileUrl }, caption: headerText });
+    imageSent = true;
   } catch (error) {
-    logger.info({ err: error }, 'Profile image unavailable; sending text menu');
-    await sendText(chat, menuText);
+    logger.info({ err: error }, 'Profile image unavailable; sending text menu header');
   }
+
+  if (!imageSent) await sendText(chat, headerText);
+  if (commandText) await sendText(chat, commandText);
 });
 register('help', 'GÉNÉRAL', 'Afficher l’aide', async ({ chat }) => {
   await sendText(chat, `Utilise ${PREFIX}menu pour voir les ${commands.size} commandes actuellement enregistrées.`);
