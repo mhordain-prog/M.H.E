@@ -149,7 +149,7 @@ export function registerMheGoldV2({ register, sendText, settings, saveSettings, 
     timer.unref?.();
   });
 
-  register('mheclone', 'M.H.E GOLD V2', 'Générer une voix synthétique originale : .mheclone vocal texte', async ({ chat, args }) => {
+  const cloneHandler = async ({ chat, args }) => {
     const subcommand = (args[0] || '').toLowerCase();
     const text = args.slice(1).join(' ').trim();
     if (subcommand !== 'vocal' || !text) {
@@ -166,7 +166,9 @@ export function registerMheGoldV2({ register, sendText, settings, saveSettings, 
       fileName: 'mhe-voice-ai.mp3',
       ptt: false,
     });
-  });
+  };
+  register('mheclone', 'M.H.E GOLD V2', 'Générer une voix synthétique originale : .mheclone vocal texte', cloneHandler);
+  register('mhetts', 'M.H.E GOLD V2', 'Alias de .mheclone pour générer une voix synthétique', cloneHandler);
 
   return async function handleMheGoldIncoming(message, { mode }) {
     const state = ensureGoldSettings(settings);
