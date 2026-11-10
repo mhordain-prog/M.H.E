@@ -106,6 +106,32 @@ async function wikipediaSearch(query) {
   return `📚 WIKIPÉDIA — ${title}\n\n${String(summary.extract || hit.snippet || 'Résumé indisponible.').replace(/<[^>]*>/g, '').slice(0, 2500)}\n\n${summary.content_urls?.desktop?.page || 'https://fr.wikipedia.org'}`;
 }
 
+
+const aiCommandCooldowns = new Map();
+
+async function requestMheAI(prompt, instruction = 'Réponds clairement en français, sauf si la demande est dans une autre langue.') {
+  const apiKey = process.env.MHE_AI_API_KEY || process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error('Configure MHE_AI_API_KEY ou OPENAI_API_KEY dans les variables secrètes de Render pour activer les commandes IA.');
+  const endpoint = (process.env.MHE_AI_BASE_URL || 'https://api.openai.com/v1').replace(/\\/+$/, '');
+  const model = process.env.MHE_AI_MODEL || 'gpt-4o-mini';
+  const response = await fetch(`${endpoint}/chat/completions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'system', content: instruction }, { role: 'user', content: prompt.slice(0, 3500) }],
+      max_tokens: 650,
+      temperature: 0.5,
+    }),
+    signal: AbortSignal.timeout(25000),
+  });
+  if (!response.ok) throw new Error(`Le fournisseur IA a répondu HTTP ${response.status}. Vérifie la clé et les paramètres API.`);
+  const data = await response.json();
+  const answer = data.choices?.[0]?.message?.content;
+  if (typeof answer !== 'string' || !answer.trim()) throw new Error('Le fournisseur IA a renvoyé une réponse vide.');
+  return answer.trim().slice(0, 3500);
+}
+
 export function registerMheEnhancements({
   register, commands, sendText, getSocket, settings, saveSettings,
   getPrefix, getMode, getBotName, getOwnerName, getVersion, getStartedAt,
@@ -141,32 +167,45 @@ export function registerMheEnhancements({
       }
     } catch {}
     if (!sentImage) await sendText(chat, caption);
+    const categoryLines = categories.map(([category, items], index) =>
+      `${index + 1}. ${displayCategory(category)} — ${items.length} commande(s)`
+    );
+    await sendText(chat, [
+      '👑 M.H.E GOLD — MENU DES COMMANDES',
+      `📚 Total réel : ${count} commande(s)`,
+      '',
+      ...categoryLines,
+      '',
+      `Pour ouvrir une catégorie : ${getPrefix()}menucat numéro`,
+      `Pour chercher une commande : ${getPrefix()}searchcmd mot-clé`,
+    ].join('\n'));
+
     const rows = categories.slice(0, 10).map(([category, items], index) => ({
       title: displayCategory(category).slice(0, 24),
-      description: `${items.length} command(s) — open category`.slice(0, 72),
-      rowId: `mhecat:${index}`,
+      description: `${items.length} commande(s) — ouvrir`.slice(0, 72),
+      rowId: `mhecat:${index + 1}`,
     }));
     if (socket && rows.length) {
       try {
         await socket.sendMessage(chat, {
           text: '👑 M.H.E GOLD — COMMAND CENTER',
           footer: 'HORDAIN MADILA • GOLDEN BOT SYSTEM',
-          title: 'COMMAND CATEGORIES',
-          buttonText: 'OPEN MENU',
-          sections: [{ title: 'AVAILABLE CATEGORIES', rows }],
+          title: 'CATÉGORIES DISPONIBLES',
+          buttonText: 'OUVRIR LE MENU',
+          sections: [{ title: 'CHOISIR UNE CATÉGORIE', rows }],
         });
       } catch (error) {
-        await sendText(chat, 'Interactive menu is not supported by this WhatsApp client. Use .menucat 1 to open the first category.');
+        await sendText(chat, `Le menu interactif n’est pas disponible. Utilise ${getPrefix()}menucat 1 pour ouvrir la première catégorie.`);
       }
     }
   });
 
   register('menucat', 'GENERAL', 'Open a category from the interactive menu', async ({ chat, args }) => {
     const categories = getCategories(commands);
-    const index = Number(args[0]);
+    const index = Number(args[0]) - 1;
     if (!Number.isInteger(index) || index < 0 || index >= categories.length) {
-      const names = categories.map(([name], i) => `${i + 1}. ${name}`).join('\n');
-      await sendText(chat, `Choose a category number:\n${names}\n\nUse ${getPrefix()}menucat 1`);
+      const names = categories.map(([name], i) => `${i + 1}. ${displayCategory(name)}`).join('\n');
+      await sendText(chat, `Choisis un numéro de catégorie :\n${names}\n\nUtilise ${getPrefix()}menucat 1`);
       return;
     }
     const [category, items] = categories[index];
@@ -244,6 +283,43 @@ export function registerMheEnhancements({
       await command.handler(context);
     }, true);
   }
+
+
+  for (const [alias, instruction, usage] of [
+    ['ai', 'Réponds comme un assistant utile et précis.', 'question'],
+    ['ask', 'Réponds directement à la question de l’utilisateur.', 'question'],
+    ['explain', 'Explique simplement, étape par étape, avec un exemple si utile.', 'notion à expliquer'],
+    ['summarize', 'Résume fidèlement le texte fourni en conservant les idées essentielles.', 'texte à résumer'],
+    ['code', 'Aide à écrire ou comprendre du code. Donne une solution claire et explique les choix.', 'question de programmation'],
+  ]) {
+    register(alias, 'AI & INTELLIGENCE', `Assistant IA : .${alias} ${usage}`, async ({ chat, actor, args }) => {
+      const prompt = args.join(' ').trim();
+      if (!prompt || prompt.length > 3500) throw new Error(`Utilise ${getPrefix()}${alias} ${usage} (3500 caractères maximum).`);
+      const now = Date.now();
+      const previous = aiCommandCooldowns.get(actor) || 0;
+      if (now - previous < 8000) throw new Error('Attends quelques secondes avant une nouvelle demande IA.');
+      aiCommandCooldowns.set(actor, now);
+      await sendText(chat, '🤖 M.H.E AI traite ta demande…');
+      const answer = await requestMheAI(prompt, instruction);
+      await sendText(chat, `🤖 M.H.E AI — ${alias.toUpperCase()}\n\n${answer}`);
+    });
+  }
+
+  register('translate', 'AI & INTELLIGENCE', 'Traduire : .translate langue cible | texte', async ({ chat, actor, args }) => {
+    const separator = args.indexOf('|');
+    const targetLanguage = (separator >= 0 ? args.slice(0, separator) : args.slice(0, 1)).join(' ').trim();
+    const sourceText = (separator >= 0 ? args.slice(separator + 1) : args.slice(1)).join(' ').trim();
+    if (!targetLanguage || !sourceText || sourceText.length > 3000) {
+      throw new Error(`Utilise ${getPrefix()}translate anglais | Bonjour, comment vas-tu ?`);
+    }
+    const now = Date.now();
+    const previous = aiCommandCooldowns.get(actor) || 0;
+    if (now - previous < 8000) throw new Error('Attends quelques secondes avant une nouvelle demande IA.');
+    aiCommandCooldowns.set(actor, now);
+    await sendText(chat, '🌍 Traduction en cours…');
+    const answer = await requestMheAI(sourceText, `Traduis fidèlement le texte en ${targetLanguage}. Retourne uniquement la traduction, sans commentaire.`);
+    await sendText(chat, `🌍 Traduction — ${targetLanguage}\n\n${answer}`);
+  });
 
   settings.todos ||= {};
   register('todo', 'PRODUCTIVITY', 'Manage your personal task list: add, list, done, clear', async ({ chat, actor, args }) => {
