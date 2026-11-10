@@ -217,7 +217,7 @@ register('menu', 'GÉNÉRAL', 'Afficher le menu GOLD et les commandes réellemen
     '╚════════════════════════════╝',
     'Select a category below to browse commands.'
   ];
-  const headerText = headerLines.join('\\n');
+  const headerText = headerLines.join('\n');
 
   // Keep the image caption short: WhatsApp captions have a much smaller limit
   // than regular text messages. Send the complete command list separately.
@@ -227,7 +227,7 @@ register('menu', 'GÉNÉRAL', 'Afficher le menu GOLD et les commandes réellemen
     for (const item of items) commandLines.push('➣ ' + PREFIX + item.name);
     commandLines.push('');
   }
-  const commandText = commandLines.join('\\n').trim();
+  const commandText = commandLines.join('\n').trim();
 
   let imageSent = false;
   try {
@@ -699,7 +699,7 @@ register('botinfo', 'GÉNÉRAL', 'Afficher les informations du bot', async ({ ch
     `├✦ Commandes enregistrées : ${commands.size}`,
     `├✦ Uptime : ${formatUptime(Date.now() - STARTED_AT)}`,
     '╰━━━━━━━━━━━━━━⊷',
-  ].join('\\n'));
+  ].join('\n'));
 });
 register('chatid', 'GÉNÉRAL', 'Afficher l’identifiant du chat', async ({ chat }) => {
   await sendText(chat, `🆔 ID du chat : ${chat}`);
