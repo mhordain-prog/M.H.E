@@ -94,7 +94,7 @@ async function synthesizeOriginalVoice(text) {
 export function registerMheGoldV2({ register, sendText, settings, saveSettings, getSocket, getPrefix }) {
   ensureGoldSettings(settings);
 
-  register('mheai', 'M.H.E GOLD V2', 'Activer, désactiver ou consulter l’assistant IA privé', async ({ chat, args }) => {
+  register('mheai', 'AI', 'Activer, désactiver ou consulter l’assistant IA privé', async ({ chat, args }) => {
     const state = ensureGoldSettings(settings);
     const action = (args[0] || 'status').toLowerCase();
     if (action === 'on') {
@@ -127,7 +127,7 @@ export function registerMheGoldV2({ register, sendText, settings, saveSettings, 
     throw new Error(`Utilise ${getPrefix()}mheai on, off, status ou message ton_instruction.`);
   }, true);
 
-  register('mheghost', 'M.H.E GOLD V2', 'Envoyer un message que le bot tentera de supprimer après un délai', async ({ chat, args }) => {
+  register('mheghost', 'TOOLS', 'Envoyer un message que le bot tentera de supprimer après un délai', async ({ chat, args }) => {
     const seconds = Number(args[0]);
     const text = args.slice(1).join(' ').trim();
     if (!Number.isInteger(seconds) || seconds < 5 || seconds > GHOST_MAX_SECONDS || !text) {
@@ -167,8 +167,8 @@ export function registerMheGoldV2({ register, sendText, settings, saveSettings, 
       ptt: false,
     });
   };
-  register('mheclone', 'M.H.E GOLD V2', 'Générer une voix synthétique originale : .mheclone vocal texte', cloneHandler);
-  register('mhetts', 'M.H.E GOLD V2', 'Alias de .mheclone pour générer une voix synthétique', cloneHandler);
+  register('mheclone', 'AI', 'Générer une voix synthétique originale : .mheclone vocal texte', cloneHandler);
+  register('mhetts', 'AI', 'Alias de .mheclone pour générer une voix synthétique', cloneHandler);
 
   return async function handleMheGoldIncoming(message, { mode }) {
     const state = ensureGoldSettings(settings);
