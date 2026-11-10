@@ -13,7 +13,7 @@ function setup() {
     getSocket: () => ({ user: { id: 'bot@s.whatsapp.net' }, profilePictureUrl: async () => { throw new Error('no picture'); }, sendMessage: async (chat, payload) => { sent.push({ chat, payload }); } }),
     settings, saveSettings: async () => { saved += 1; }, getPrefix: () => '.', getMode: () => 'private',
     getBotName: () => 'M.H.E-MD GOLD', getOwnerName: () => 'HORDAIN MADILA', getVersion: () => '1.0 GOLD',
-    getStartedAt: () => Date.now() - 5000, getGroupContext: async () => ({ actorIsAdmin: true }),
+    getStartedAt: () => Date.now() - 5000, getGroupContext: async () => ({ actorIsAdmin: true, botIsAdmin: true, participants: [{ id: '123@s.whatsapp.net', admin: true }] }),
     requireGroup: (chat) => { if (!chat.endsWith('@g.us')) throw new Error('group only'); },
   });
   return { commands, sent, settings, getSaved: () => saved };
@@ -111,4 +111,24 @@ test('owner-only commands are clearly marked in category details', async () => {
   commands.set('secret', { name: 'secret', category: 'OWNER', description: 'owner operation', ownerOnly: true });
   await commands.get('menucat').handler({ chat: 'test@s.whatsapp.net', args: ['1'] });
   assert.match(sent.at(-1).text, /secret 🔒 PROPRIÉTAIRE/);
+});
+
+test('help accepts a command written with the configured prefix', async () => {
+  const { commands, sent } = setup();
+  commands.set('ping', { name: 'ping', category: 'GENERAL', description: 'Check the bot', handler: async () => {} });
+  await commands.get('help').handler({ chat: 'test@s.whatsapp.net', args: ['.ping'] });
+  assert.match(sent.at(-1).text, /AIDE — \.ping/);
+  assert.match(sent.at(-1).text, /Check the bot/);
+});
+
+test('kick refuses to remove a group administrator', async () => {
+  const { commands } = setup();
+  await assert.rejects(
+    commands.get('kick').handler({
+      chat: 'g@g.us',
+      actor: 'admin@s.whatsapp.net',
+      message: { message: { extendedTextMessage: { contextInfo: { mentionedJid: ['123:4@s.whatsapp.net'] } } } },
+    }),
+    /ne peut pas retirer un administrateur/,
+  );
 });
