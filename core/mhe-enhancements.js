@@ -258,7 +258,7 @@ export function registerMheEnhancements({
   });
 
   register('help', 'GENERAL', 'Afficher l’aide générale ou celle d’une commande', async ({ chat, args }) => {
-    const requested = (args[0] || '').toLowerCase().replace(/^\\./, '');
+    const requested = (args[0] || '').toLowerCase().replace(/^\./, '');
     if (!requested) {
       await sendText(chat, `👑 M.H.E GOLD — AIDE\n\n• ${getPrefix()}menu : afficher les catégories\n• ${getPrefix()}menucat numéro : ouvrir une catégorie\n• ${getPrefix()}searchcmd mot-clé : rechercher une commande\n• ${getPrefix()}help commande : afficher l’aide d’une commande`);
       return;
@@ -575,7 +575,7 @@ export function registerMheEnhancements({
     const targets = [...new Set([...(info.mentionedJid || []), ...(info.participant ? [info.participant] : [])])];
     if (targets.length !== 1) throw new Error(`Mentionne un seul membre ou réponds à son message : ${getPrefix()}kick @membre`);
     const target = targets[0];
-    const numberOf = (jid = '') => String(jid).split('@')[0].split(':')[0].replace(/\\D/g, '');
+    const numberOf = (jid = '') => String(jid).split('@')[0].split(':')[0].replace(/\D/g, '');
     const targetNumber = numberOf(target);
     const targetInfo = context.participants?.find((item) => numberOf(item.id || item.jid) === targetNumber);
     const botNumber = numberOf(getSocket()?.user?.id || '');
