@@ -48,12 +48,14 @@ registerReferrals({ app });
 app.get('/', (_req, res) => res.sendFile(path.resolve('index.html')));
 
 let socket;
+let whatsappConnection = 'starting';
 let authState;
 let saveCreds;
 let reconnectTimer;
 let mode = process.env.BOT_MODE === 'public' ? 'public' : 'private';
 let settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true };
 let pairCooldownUntil = 0;
+let pairRequestInProgress = false;
 const pairIpCooldowns = new Map();
 const PAIR_COOLDOWN_MS = 45_000;
 const commands = new Map();
@@ -941,7 +943,7 @@ app.get('/health', (_req, res) => {
   res.json({
     ok: true,
     name: BOT_NAME,
-    whatsapp: socket?.user ? 'connected' : 'waiting',
+    whatsapp: whatsappConnection === 'open' ? 'connected' : whatsappConnection === 'close' ? 'disconnected' : 'waiting',
     registered: Boolean(authState?.creds?.registered),
     commands: commands.size,
     mode,
@@ -952,34 +954,58 @@ app.post('/api/pair', async (req, res) => {
   const now = Date.now();
   const ip = req.ip || 'unknown';
   const lastIpRequest = pairIpCooldowns.get(ip) || 0;
-  if (now < pairCooldownUntil || now - lastIpRequest < PAIR_COOLDOWN_MS) {
-    return res.status(429).json({ error: 'Attends quelques secondes avant de demander un nouveau code.' });
+  if (pairRequestInProgress || now < pairCooldownUntil || now - lastIpRequest < PAIR_COOLDOWN_MS) {
+    return res.status(429).json({ error: 'Une demande est déjà en cours ou vient d’être effectuée. Attends 45 secondes avant de réessayer.' });
   }
   const number = String(req.body?.number || '').replace(/\D/g, '');
   if (number.length < 10 || number.length > 15) {
-    return res.status(400).json({ error: 'Entre ton numéro avec l’indicatif du pays, chiffres uniquement.' });
+    return res.status(400).json({ error: 'Entre ton numéro WhatsApp au format international, chiffres uniquement, sans + ni espaces.' });
   }
   if (!socket || !authState || authState.creds.registered) {
-    return res.status(409).json({ error: 'Le bot est déjà lié ou le service WhatsApp n’est pas prêt.' });
+    return res.status(409).json({ error: 'Le service WhatsApp n’est pas disponible pour un nouvel appairage. Vérifie son état puis réessaie.' });
   }
+
+  const pairingSocket = socket;
+  if (typeof pairingSocket.waitForSocketOpen !== 'function') {
+    return res.status(503).json({ error: 'Le module WhatsApp du serveur doit être actualisé avant de générer un code.' });
+  }
+
+  pairRequestInProgress = true;
   try {
     pairCooldownUntil = now + PAIR_COOLDOWN_MS;
     pairIpCooldowns.set(ip, now);
-    const code = await socket.requestPairingCode(number);
+
+    // Wait for the WebSocket transport, then allow the WhatsApp handshake to settle.
+    await pairingSocket.waitForSocketOpen();
+    await new Promise((resolve) => setTimeout(resolve, 3500));
+    if (socket !== pairingSocket || !pairingSocket.ws?.isOpen) {
+      throw new Error('WhatsApp connection changed before the pairing request.');
+    }
+
+    const code = await pairingSocket.requestPairingCode(number);
+    logger.warn({ event: 'pairing_code_issued' }, 'WhatsApp pairing code issued');
     return res.json({ code: String(code).match(/.{1,4}/g)?.join('-') || String(code) });
   } catch (error) {
     logger.warn({ err: error }, 'Pairing request failed');
     pairCooldownUntil = 0;
-    return res.status(503).json({ error: 'Impossible de générer le code pour le moment. Réessaie plus tard.' });
+    pairIpCooldowns.delete(ip);
+    return res.status(503).json({ error: 'Le serveur WhatsApp n’a pas terminé sa connexion. Attends quelques secondes puis réessaie.' });
+  } finally {
+    pairRequestInProgress = false;
   }
 });
 app.get('/api/status', (_req, res) => {
-  res.json({ connected: Boolean(socket?.user), registered: Boolean(authState?.creds?.registered) });
+  res.json({
+    connected: whatsappConnection === 'open',
+    registered: Boolean(authState?.creds?.registered),
+    state: whatsappConnection,
+  });
 });
 const server = app.listen(PORT, '0.0.0.0', () => logger.info({ port: PORT }, 'M.H.E. web server started'));
 
 async function startWhatsApp() {
   if (reconnectTimer) clearTimeout(reconnectTimer);
+  whatsappConnection = 'connecting';
   await fs.mkdir(SESSION_DIR, { recursive: true, mode: 0o700 });
   if (!sessionRestoredOnce) {
     const restored = await sessionStore.restore(SESSION_DIR);
@@ -1006,13 +1032,18 @@ async function startWhatsApp() {
     logger,
     printQRInTerminal: false,
     browser: ['Ubuntu', 'Chrome', '1.0.0'],
+    connectTimeoutMs: 60_000,
+    defaultQueryTimeoutMs: 60_000,
+    keepAliveIntervalMs: 30_000,
     markOnlineOnConnect: false,
     syncFullHistory: false,
   });
   socket.ev.on('creds.update', saveCreds);
   socket.ev.on('connection.update', ({ connection, lastDisconnect }) => {
+    if (connection) whatsappConnection = connection;
     if (connection === 'open') logger.info('WhatsApp connected');
     if (connection === 'close') {
+      whatsappConnection = 'close';
       socket = undefined;
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       if (statusCode !== DisconnectReason.loggedOut) {
@@ -1179,7 +1210,10 @@ registerMheEnhancements({
   getStartedAt: () => STARTED_AT, getGroupContext: groupContext, requireGroup,
 });
 
-await startWhatsApp().catch((error) => logger.error({ err: error }, 'WhatsApp startup failed'));
+await startWhatsApp().catch((error) => {
+  whatsappConnection = 'error';
+  logger.error({ err: error }, 'WhatsApp startup failed');
+});
 process.on('SIGTERM', async () => {
   server.close();
   if (sessionSyncTimer) clearInterval(sessionSyncTimer);
