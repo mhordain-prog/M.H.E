@@ -1126,6 +1126,7 @@ async function startWhatsApp() {
       }
       if (message.key.remoteJid?.endsWith('@g.us') && !message.key.fromMe) {
         const groupJid = message.key.remoteJid;
+        const group = getGroupSettings(groupJid);
         const actorJid = senderJid(message);
         const isStatusMention = Boolean(message.message?.groupStatusMentionMessage);
         const mentionCount = message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length || 0;
