@@ -1132,10 +1132,10 @@ async function startWhatsApp() {
         const isMassTag = mentionCount >= 5;
         const isLink = /(?:https?:\/\/|www\.|chat\.whatsapp\.com\/|wa\.me\/|t\.me\/|bit\.ly\/|(?:^|[\s([<{])(?:[a-z0-9-]+\.)+(?:com|net|org|io|co|me|app|dev|gg|xyz|info|site|online|ru|fr|cg|uk|us)(?:\b|\/))/i.test(text);
         let reason = '';
-        if (settings.antistatusmention && isStatusMention) reason = 'Mention de statut interdite';
-        else if (settings.antitag && isMassTag) reason = 'Mention massive interdite';
-        else if (settings.antilink && isLink) reason = 'Lien interdit';
-        else if (settings.antispam && warningManager.detectSpam(groupJid, actorJid)) reason = 'Spam / messages répétés';
+        if (group.antistatusmention && isStatusMention) reason = 'Mention de statut interdite';
+        else if (group.antitag && isMassTag) reason = 'Mention massive interdite';
+        else if (group.antilink && isLink) reason = 'Lien interdit';
+        else if (group.antispam && warningManager.detectSpam(groupJid, actorJid)) reason = 'Spam / messages répétés';
         if (reason) {
           try {
             await warningManager.warn({ groupJid, actorJid, reason });
