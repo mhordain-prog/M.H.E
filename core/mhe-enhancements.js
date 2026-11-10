@@ -8,28 +8,44 @@ function duration(ms) {
   return [days ? `${days}d` : '', hours ? `${hours}h` : '', minutes ? `${minutes}m` : '', `${seconds % 60}s`].filter(Boolean).join(' ');
 }
 
+const CATEGORY_ORDER = ['OWNER', 'BOT', 'GROUP', 'AI', 'DOWNLOADER', 'CONVERTER', 'TOOLS', 'GAMES & FUN', 'OTHER'];
+
+function normalizeCategory(category = '') {
+  const value = String(category).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+  if (['OWNER', 'PROPRIETAIRE', 'PROPRIÉTAIRE'].includes(value)) return 'OWNER';
+  if (['GENERAL', 'SYSTEM', 'UTILITIES', 'SEARCH', 'PRODUCTIVITY', 'BOT'].includes(value)) return 'BOT';
+  if (['GROUP', 'GROUPS', 'GROUPES', 'GROUPE MANAGER'].includes(value)) return 'GROUP';
+  if (['AI', 'AI & INTELLIGENCE', 'M.H.E GOLD V2'].includes(value)) return 'AI';
+  if (['DOWNLOADER', 'DOWNLOADS', 'TELECHARGEMENT'].includes(value)) return 'DOWNLOADER';
+  if (['CONVERTER', 'CONVERTERS', 'CONVERSION'].includes(value)) return 'CONVERTER';
+  if (['TOOLS', 'OUTILS', 'TEXT', 'TEXT / FONTS', 'TEXTE', 'TEXTE / POLICES'].includes(value)) return 'TOOLS';
+  if (['FUN', 'GAMES', 'GAMES & FUN'].includes(value)) return 'GAMES & FUN';
+  return 'OTHER';
+}
+
 function displayCategory(category) {
   const labels = {
-    'GÉNÉRAL': 'GENERAL',
-    'PROPRIÉTAIRE': 'OWNER',
-    'GROUPES': 'GROUPS',
-    'TEXTE': 'TEXT',
-    'TEXTE / POLICES': 'TEXT / FONTS',
-    'TÉLÉCHARGEMENT': 'DOWNLOADS',
-    'OUTILS': 'TOOLS',
-    'M.H.E GOLD V2': 'AI & GOLD V2',
+    OWNER: '👑 OWNER',
+    BOT: '🤖 BOT',
+    GROUP: '👥 GROUP MANAGER',
+    AI: '🧠 AI',
+    DOWNLOADER: '⬇️ DOWNLOADER',
+    CONVERTER: '🔄 CONVERTER',
+    TOOLS: '🛠️ TOOLS',
+    'GAMES & FUN': '🎮 GAMES & FUN',
+    OTHER: '📦 OTHER',
   };
-    return labels[category] || String(category).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  return labels[category] || labels.OTHER;
 }
 
 function getCategories(commands) {
   const categories = new Map();
   for (const command of commands.values()) {
-    const category = command.category || 'OTHER';
+    const category = normalizeCategory(command.category || 'OTHER');
     if (!categories.has(category)) categories.set(category, []);
     categories.get(category).push(command);
   }
-  return [...categories.entries()].sort(([a], [b]) => a.localeCompare(b));
+  return [...categories.entries()].sort(([a], [b]) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b));
 }
 
 function safeKey(value = '') {
@@ -154,7 +170,7 @@ export function registerMheEnhancements({
       `🔒 MODE : ${String(getMode()).toUpperCase()}`,
       '╚════════════════════════════╝',
       '',
-      'Select a category below to browse commands.',
+      'Choisis une catégorie pour afficher ses commandes.',
     ].join('\n');
     const socket = getSocket();
     let sentImage = false;
@@ -200,7 +216,7 @@ export function registerMheEnhancements({
     }
   });
 
-  register('menucat', 'GENERAL', 'Open a category from the interactive menu', async ({ chat, args }) => {
+  register('menucat', 'GENERAL', 'Afficher une catégorie : .menucat numéro [page]', async ({ chat, args }) => {
     const categories = getCategories(commands);
     const index = Number(args[0]) - 1;
     if (!Number.isInteger(index) || index < 0 || index >= categories.length) {
@@ -209,8 +225,16 @@ export function registerMheEnhancements({
       return;
     }
     const [category, items] = categories[index];
-    const lines = items.map((item) => `• ${getPrefix()}${item.name} — ${item.description || 'No description'}`);
-    await sendText(chat, `👑 M.H.E GOLD — ${displayCategory(category)}\n\n${lines.join('\n')}\n\nTotal: ${items.length} command(s)\nUse ${getPrefix()}menu to return.`);
+    const pageSize = 25;
+    const pages = Math.max(1, Math.ceil(items.length / pageSize));
+    const page = Number(args[1] || 1);
+    if (!Number.isInteger(page) || page < 1 || page > pages) {
+      throw new Error(`Page invalide. Utilise ${getPrefix()}menucat ${index + 1} 1 à ${pages}.`);
+    }
+    const pageItems = items.slice((page - 1) * pageSize, page * pageSize);
+    const lines = pageItems.map((item) => `• ${getPrefix()}${item.name} — ${item.description || 'Description indisponible'}`);
+    const next = page < pages ? `\nPage suivante : ${getPrefix()}menucat ${index + 1} ${page + 1}` : '';
+    await sendText(chat, `👑 M.H.E GOLD — ${displayCategory(category)}\n📄 Page ${page}/${pages}\n\n${lines.join('\n')}\n\nTotal : ${items.length} commande(s)${next}\n\nRetour : ${getPrefix()}menu`);
   });
 
   register('searchcmd', 'GENERAL', 'Search registered commands by name or description', async ({ chat, args }) => {
@@ -225,6 +249,20 @@ export function registerMheEnhancements({
       ? `🔎 COMMAND SEARCH — ${found.length} result(s)\n\n${found.map((item) => `• ${getPrefix()}${item.name} — ${item.description || item.category}`).join('\n')}`
       : `No command found for “${query}”.`);
   });
+
+  register('auto', 'GENERAL', 'Activer ou désactiver la réaction automatique du bot', async ({ chat, args }) => {
+    const action = (args[0] || 'status').toLowerCase();
+    if (action === 'status') {
+      await sendText(chat, `⚡ Réaction automatique : ${settings.autoreact === false ? 'désactivée' : 'activée'}.`);
+      return;
+    }
+    if (!['on', 'off'].includes(action)) throw new Error(`Utilise ${getPrefix()}auto on, off ou status.`);
+    settings.autoreact = action === 'on';
+    await saveSettings();
+    await sendText(chat, `⚡ Réaction automatique ${settings.autoreact ? 'activée' : 'désactivée'}.`);
+  }, true);
+
+
 
   register('stats', 'SYSTEM', 'Show live bot and process statistics', async ({ chat }) => {
     const memory = process.memoryUsage();
@@ -243,6 +281,9 @@ export function registerMheEnhancements({
       `System memory : ${(os.totalmem() / 1024 / 1024 / 1024).toFixed(1)} GB`,
     ];
     await sendText(chat, lines.join('\n'));
+  });
+  register('mhestat', 'SYSTEM', 'Alias de .stats : statistiques système en direct', async (context) => {
+    await commands.get('stats').handler(context);
   });
 
   register('time', 'UTILITIES', 'Show the current time in a timezone', async ({ chat, args }) => {
@@ -437,4 +478,61 @@ export function registerMheEnhancements({
     const rules = settings.groups?.[chat]?.rules;
     await sendText(chat, rules ? `📜 GROUP RULES\n\n${rules}` : `No rules saved. An admin can set them with ${getPrefix()}setrules <rules>.`);
   });
+
+  for (const [name, setting, label] of [
+    ['antilink', 'antilink', 'anti-liens'],
+    ['antispam', 'antispam', 'anti-spam'],
+    ['antitag', 'antitag', 'anti-mentions massives'],
+    ['antistatusmention', 'antistatusmention', 'anti-mentions de statut'],
+  ]) {
+    register(name, 'GROUPS', `Activer ou désactiver ${label} : .${name} on/off/status`, async ({ chat, actor, args }) => {
+      requireGroup(chat);
+      const context = await getGroupContext(chat, actor);
+      if (!context.actorIsAdmin) throw new Error('⛔ Cette commande est réservée aux administrateurs du groupe.');
+      settings.groups ||= {};
+      settings.groups[chat] ||= {};
+      const group = settings.groups[chat];
+      const action = (args[0] || 'status').toLowerCase();
+      if (action === 'status') {
+        await sendText(chat, `🛡️ ${label} : ${group[setting] ? 'activé' : 'désactivé'}.`);
+        return;
+      }
+      if (!['on', 'off'].includes(action)) throw new Error(`Utilise .${name} on, off ou status.`);
+      group[setting] = action === 'on';
+      await saveSettings();
+      await sendText(chat, `🛡️ ${label} ${group[setting] ? 'activé' : 'désactivé'} dans ce groupe.`);
+    });
+  }
+
+  register('kick', 'GROUPS', 'Retirer un membre (admin du groupe, mention ou réponse)', async ({ chat, actor, message }) => {
+    requireGroup(chat);
+    const context = await getGroupContext(chat, actor);
+    if (!context.actorIsAdmin) throw new Error('⛔ Seuls les administrateurs du groupe peuvent retirer un membre.');
+    if (!context.botIsAdmin) throw new Error('⚠️ M.H.E doit être administrateur pour retirer un membre.');
+    const info = message?.message?.extendedTextMessage?.contextInfo || {};
+    const targets = [...new Set([...(info.mentionedJid || []), ...(info.participant ? [info.participant] : [])])];
+    if (targets.length !== 1) throw new Error(`Mentionne un seul membre ou réponds à son message : ${getPrefix()}kick @membre`);
+    const target = targets[0];
+    const targetInfo = context.participants?.find((item) => item.id === target || item.jid === target);
+    if (targetInfo?.admin || targetInfo?.isAdmin || targetInfo?.isSuperAdmin) {
+      throw new Error('⛔ M.H.E ne peut pas retirer un administrateur du groupe.');
+    }
+    await getSocket().groupParticipantsUpdate(chat, [target], 'remove');
+    await sendText(chat, `✅ Demande de retrait envoyée pour @${target.split('@')[0]}.`, { mentions: [target] });
+  });
+
+  for (const [name, setting, success] of [
+    ['lockgc', 'announcement', '🔒 Groupe fermé : seuls les administrateurs peuvent envoyer des messages.'],
+    ['unlockgc', 'not_announcement', '🔓 Groupe ouvert : tous les membres peuvent envoyer des messages.'],
+  ]) {
+    register(name, 'GROUPS', name === 'lockgc' ? 'Réserver les messages aux administrateurs' : 'Autoriser tous les membres à envoyer des messages', async ({ chat, actor }) => {
+      requireGroup(chat);
+      const context = await getGroupContext(chat, actor);
+      if (!context.actorIsAdmin) throw new Error('⛔ Cette commande est réservée aux administrateurs du groupe.');
+      if (!context.botIsAdmin) throw new Error('⚠️ M.H.E doit être administrateur pour modifier les paramètres du groupe.');
+      await getSocket().groupSettingUpdate(chat, setting);
+      await sendText(chat, success);
+    });
+  }
+
 }
