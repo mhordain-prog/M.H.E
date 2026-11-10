@@ -21,7 +21,7 @@ function setup() {
 
 test('registers the enhanced menu and useful English command families', () => {
   const { commands } = setup();
-  for (const name of ['menu', 'menucat', 'searchcmd', 'auto', 'stats', 'mhestat', 'time', 'date', 'weather', 'wiki', 'todo', 'note', 'groupinfo', 'members', 'setrules', 'rules', 'admins', 'antilink', 'antispam', 'antitag', 'antistatusmention', 'kick', 'lockgc', 'unlockgc', 'ai', 'ask', 'explain', 'summarize', 'code', 'translate']) {
+  for (const name of ['menu', 'menucat', 'searchcmd', 'help', 'auto', 'upper', 'lower', 'base64', 'urlencode', 'urldecode', 'stats', 'mhestat', 'time', 'date', 'weather', 'wiki', 'todo', 'note', 'groupinfo', 'members', 'setrules', 'rules', 'admins', 'antilink', 'antispam', 'antitag', 'antistatusmention', 'kick', 'lockgc', 'unlockgc', 'ai', 'ask', 'explain', 'summarize', 'code', 'translate']) {
     assert.ok(commands.has(name), name);
   }
 });
@@ -36,9 +36,14 @@ test('menu sends a live category selector with a safe text fallback', async () =
   assert.ok(interactive.payload.sections[0].rows.length <= 10);
   assert.ok(sent.some((item) => /M.H.E-MD GOLD/.test(item.text || '')));
   const listing = sent.find((item) => /MENU DES COMMANDES/.test(item.text || ''))?.text || '';
+  assert.match(listing, /OWNER/);
   assert.match(listing, /BOT/);
   assert.match(listing, /GROUP MANAGER/);
   assert.match(listing, /AI/);
+  assert.match(listing, /DOWNLOADER/);
+  assert.match(listing, /CONVERTER/);
+  assert.match(listing, /TOOLS/);
+  assert.match(listing, /GAMES & FUN/);
   assert.doesNotMatch(listing, /GENERAL|PRODUCTIVITY|SYSTEM/);
 });
 
@@ -71,7 +76,7 @@ test('group rules require an administrator', async () => {
 
 test('category navigation uses human numbering and paginates long categories', async () => {
   const { commands, sent } = setup();
-  await commands.get('menucat').handler({ chat: 'test@s.whatsapp.net', args: ['1'] });
+  await commands.get('menucat').handler({ chat: 'test@s.whatsapp.net', args: ['2'] });
   assert.match(sent.at(-1).text, /BOT/);
   assert.match(sent.at(-1).text, /Page 1\/1/);
   await commands.get('menucat').handler({ chat: 'test@s.whatsapp.net', args: ['0'] });
@@ -83,4 +88,20 @@ test('anti-link setting is stored per group and requires a group admin', async (
   await commands.get('antilink').handler({ chat: 'g@g.us', actor: 'admin@s.whatsapp.net', args: ['on'] });
   assert.equal(settings.groups['g@g.us'].antilink, true);
   assert.equal(getSaved(), 1);
+});
+
+test('converter commands return real transformations', async () => {
+  const { commands, sent } = setup();
+  await commands.get('upper').handler({ chat: 'test@s.whatsapp.net', args: ['bonjour'] });
+  assert.equal(sent.at(-1).text, 'BONJOUR');
+  await commands.get('base64').handler({ chat: 'test@s.whatsapp.net', args: ['encode', 'Bonjour'] });
+  assert.equal(sent.at(-1).text, 'Qm9uam91cg==');
+  await commands.get('base64').handler({ chat: 'test@s.whatsapp.net', args: ['decode', 'Qm9uam91cg=='] });
+  assert.equal(sent.at(-1).text, 'Bonjour');
+});
+
+test('empty downloader category is explicit rather than advertising fake commands', async () => {
+  const { commands, sent } = setup();
+  await commands.get('menucat').handler({ chat: 'test@s.whatsapp.net', args: ['5'] });
+  assert.match(sent.at(-1).text, /fournisseur de téléchargement n’est pas encore configuré/);
 });
