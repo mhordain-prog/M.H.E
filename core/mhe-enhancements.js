@@ -8,28 +8,44 @@ function duration(ms) {
   return [days ? `${days}d` : '', hours ? `${hours}h` : '', minutes ? `${minutes}m` : '', `${seconds % 60}s`].filter(Boolean).join(' ');
 }
 
+const CATEGORY_ORDER = ['OWNER', 'BOT', 'GROUP', 'AI', 'DOWNLOADER', 'CONVERTER', 'TOOLS', 'GAMES & FUN', 'OTHER'];
+
+function normalizeCategory(category = '') {
+  const value = String(category).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+  if (['OWNER', 'PROPRIETAIRE', 'PROPRIÉTAIRE'].includes(value)) return 'OWNER';
+  if (['GENERAL', 'SYSTEM', 'UTILITIES', 'SEARCH', 'PRODUCTIVITY', 'BOT'].includes(value)) return 'BOT';
+  if (['GROUP', 'GROUPS', 'GROUPES', 'GROUPE MANAGER'].includes(value)) return 'GROUP';
+  if (['AI', 'AI & INTELLIGENCE', 'M.H.E GOLD V2'].includes(value)) return 'AI';
+  if (['DOWNLOADER', 'DOWNLOADS', 'TELECHARGEMENT'].includes(value)) return 'DOWNLOADER';
+  if (['CONVERTER', 'CONVERTERS', 'CONVERSION'].includes(value)) return 'CONVERTER';
+  if (['TOOLS', 'OUTILS', 'TEXT', 'TEXT / FONTS', 'TEXTE', 'TEXTE / POLICES'].includes(value)) return 'TOOLS';
+  if (['FUN', 'GAMES', 'GAMES & FUN'].includes(value)) return 'GAMES & FUN';
+  return 'OTHER';
+}
+
 function displayCategory(category) {
   const labels = {
-    'GÉNÉRAL': 'GENERAL',
-    'PROPRIÉTAIRE': 'OWNER',
-    'GROUPES': 'GROUPS',
-    'TEXTE': 'TEXT',
-    'TEXTE / POLICES': 'TEXT / FONTS',
-    'TÉLÉCHARGEMENT': 'DOWNLOADS',
-    'OUTILS': 'TOOLS',
-    'M.H.E GOLD V2': 'AI & GOLD V2',
+    OWNER: '👑 OWNER',
+    BOT: '🤖 BOT',
+    GROUP: '👥 GROUP MANAGER',
+    AI: '🧠 AI',
+    DOWNLOADER: '⬇️ DOWNLOADER',
+    CONVERTER: '🔄 CONVERTER',
+    TOOLS: '🛠️ TOOLS',
+    'GAMES & FUN': '🎮 GAMES & FUN',
+    OTHER: '📦 OTHER',
   };
-    return labels[category] || String(category).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  return labels[category] || labels.OTHER;
 }
 
 function getCategories(commands) {
-  const categories = new Map();
+  const categories = new Map(CATEGORY_ORDER.filter((category) => category !== 'OTHER').map((category) => [category, []]));
   for (const command of commands.values()) {
-    const category = command.category || 'OTHER';
+    const category = normalizeCategory(command.category || 'OTHER');
     if (!categories.has(category)) categories.set(category, []);
     categories.get(category).push(command);
   }
-  return [...categories.entries()].sort(([a], [b]) => a.localeCompare(b));
+  return [...categories.entries()].sort(([a], [b]) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b));
 }
 
 function safeKey(value = '') {
@@ -106,6 +122,32 @@ async function wikipediaSearch(query) {
   return `📚 WIKIPÉDIA — ${title}\n\n${String(summary.extract || hit.snippet || 'Résumé indisponible.').replace(/<[^>]*>/g, '').slice(0, 2500)}\n\n${summary.content_urls?.desktop?.page || 'https://fr.wikipedia.org'}`;
 }
 
+
+const aiCommandCooldowns = new Map();
+
+async function requestMheAI(prompt, instruction = 'Réponds clairement en français, sauf si la demande est dans une autre langue.') {
+  const apiKey = process.env.MHE_AI_API_KEY || process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error('Configure MHE_AI_API_KEY ou OPENAI_API_KEY dans les variables secrètes de Render pour activer les commandes IA.');
+  const endpoint = (process.env.MHE_AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
+  const model = process.env.MHE_AI_MODEL || 'gpt-4o-mini';
+  const response = await fetch(`${endpoint}/chat/completions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'system', content: instruction }, { role: 'user', content: prompt.slice(0, 3500) }],
+      max_tokens: 650,
+      temperature: 0.5,
+    }),
+    signal: AbortSignal.timeout(25000),
+  });
+  if (!response.ok) throw new Error(`Le fournisseur IA a répondu HTTP ${response.status}. Vérifie la clé et les paramètres API.`);
+  const data = await response.json();
+  const answer = data.choices?.[0]?.message?.content;
+  if (typeof answer !== 'string' || !answer.trim()) throw new Error('Le fournisseur IA a renvoyé une réponse vide.');
+  return answer.trim().slice(0, 3500);
+}
+
 export function registerMheEnhancements({
   register, commands, sendText, getSocket, settings, saveSettings,
   getPrefix, getMode, getBotName, getOwnerName, getVersion, getStartedAt,
@@ -128,7 +170,7 @@ export function registerMheEnhancements({
       `🔒 MODE : ${String(getMode()).toUpperCase()}`,
       '╚════════════════════════════╝',
       '',
-      'Select a category below to browse commands.',
+      'Choisis une catégorie pour afficher ses commandes.',
     ].join('\n');
     const socket = getSocket();
     let sentImage = false;
@@ -141,37 +183,65 @@ export function registerMheEnhancements({
       }
     } catch {}
     if (!sentImage) await sendText(chat, caption);
+    const categoryLines = categories.map(([category, items], index) =>
+      `${index + 1}. ${displayCategory(category)} — ${items.length} commande(s)`
+    );
+    await sendText(chat, [
+      '👑 M.H.E GOLD — MENU DES COMMANDES',
+      `📚 Total réel : ${count} commande(s)`,
+      '',
+      ...categoryLines,
+      '',
+      `Pour ouvrir une catégorie : ${getPrefix()}menucat numéro`,
+      `Pour chercher une commande : ${getPrefix()}searchcmd mot-clé`,
+    ].join('\n'));
+
     const rows = categories.slice(0, 10).map(([category, items], index) => ({
       title: displayCategory(category).slice(0, 24),
-      description: `${items.length} command(s) — open category`.slice(0, 72),
-      rowId: `mhecat:${index}`,
+      description: `${items.length} commande(s) — ouvrir`.slice(0, 72),
+      rowId: `mhecat:${index + 1}`,
     }));
     if (socket && rows.length) {
       try {
         await socket.sendMessage(chat, {
           text: '👑 M.H.E GOLD — COMMAND CENTER',
           footer: 'HORDAIN MADILA • GOLDEN BOT SYSTEM',
-          title: 'COMMAND CATEGORIES',
-          buttonText: 'OPEN MENU',
-          sections: [{ title: 'AVAILABLE CATEGORIES', rows }],
+          title: 'CATÉGORIES DISPONIBLES',
+          buttonText: 'OUVRIR LE MENU',
+          sections: [{ title: 'CHOISIR UNE CATÉGORIE', rows }],
         });
       } catch (error) {
-        await sendText(chat, 'Interactive menu is not supported by this WhatsApp client. Use .menucat 1 to open the first category.');
+        await sendText(chat, `Le menu interactif n’est pas disponible. Utilise ${getPrefix()}menucat 1 pour ouvrir la première catégorie.`);
       }
     }
   });
 
-  register('menucat', 'GENERAL', 'Open a category from the interactive menu', async ({ chat, args }) => {
+  register('menucat', 'GENERAL', 'Afficher une catégorie : .menucat numéro [page]', async ({ chat, args }) => {
     const categories = getCategories(commands);
-    const index = Number(args[0]);
+    const index = Number(args[0]) - 1;
     if (!Number.isInteger(index) || index < 0 || index >= categories.length) {
-      const names = categories.map(([name], i) => `${i + 1}. ${name}`).join('\n');
-      await sendText(chat, `Choose a category number:\n${names}\n\nUse ${getPrefix()}menucat 1`);
+      const names = categories.map(([name], i) => `${i + 1}. ${displayCategory(name)}`).join('\n');
+      await sendText(chat, `Choisis un numéro de catégorie :\n${names}\n\nUtilise ${getPrefix()}menucat 1`);
       return;
     }
     const [category, items] = categories[index];
-    const lines = items.map((item) => `• ${getPrefix()}${item.name} — ${item.description || 'No description'}`);
-    await sendText(chat, `👑 M.H.E GOLD — ${displayCategory(category)}\n\n${lines.join('\n')}\n\nTotal: ${items.length} command(s)\nUse ${getPrefix()}menu to return.`);
+    const pageSize = 25;
+    const pages = Math.max(1, Math.ceil(items.length / pageSize));
+    const page = Number(args[1] || 1);
+    if (!Number.isInteger(page) || page < 1 || page > pages) {
+      throw new Error(`Page invalide. Utilise ${getPrefix()}menucat ${index + 1} 1 à ${pages}.`);
+    }
+    if (!items.length) {
+      const notes = category === 'DOWNLOADER'
+        ? 'Le fournisseur de téléchargement n’est pas encore configuré. Aucune commande de téléchargement n’est annoncée comme fonctionnelle.'
+        : 'Aucune commande active dans cette catégorie pour le moment.';
+      await sendText(chat, `👑 M.H.E GOLD — ${displayCategory(category)}\n\n${notes}\n\nRetour : ${getPrefix()}menu`);
+      return;
+    }
+    const pageItems = items.slice((page - 1) * pageSize, page * pageSize);
+    const lines = pageItems.map((item) => `• ${getPrefix()}${item.name}${item.ownerOnly ? ' 🔒 PROPRIÉTAIRE' : ''} — ${item.description || 'Description indisponible'}`);
+    const next = page < pages ? `\nPage suivante : ${getPrefix()}menucat ${index + 1} ${page + 1}` : '';
+    await sendText(chat, `👑 M.H.E GOLD — ${displayCategory(category)}\n📄 Page ${page}/${pages}\n\n${lines.join('\n')}\n\nTotal : ${items.length} commande(s)${next}\n\nRetour : ${getPrefix()}menu`);
   });
 
   register('searchcmd', 'GENERAL', 'Search registered commands by name or description', async ({ chat, args }) => {
@@ -186,6 +256,75 @@ export function registerMheEnhancements({
       ? `🔎 COMMAND SEARCH — ${found.length} result(s)\n\n${found.map((item) => `• ${getPrefix()}${item.name} — ${item.description || item.category}`).join('\n')}`
       : `No command found for “${query}”.`);
   });
+
+  register('help', 'GENERAL', 'Afficher l’aide générale ou celle d’une commande', async ({ chat, args }) => {
+    const requested = (args[0] || '').toLowerCase().replace(/^\./, '');
+    if (!requested) {
+      await sendText(chat, `👑 M.H.E GOLD — AIDE\n\n• ${getPrefix()}menu : afficher les catégories\n• ${getPrefix()}menucat numéro : ouvrir une catégorie\n• ${getPrefix()}searchcmd mot-clé : rechercher une commande\n• ${getPrefix()}help commande : afficher l’aide d’une commande`);
+      return;
+    }
+    const command = commands.get(requested);
+    if (!command) throw new Error(`Commande inconnue : ${getPrefix()}${requested}. Utilise ${getPrefix()}searchcmd ${requested}.`);
+    await sendText(chat, `📖 AIDE — ${getPrefix()}${command.name}\nCatégorie : ${displayCategory(normalizeCategory(command.category))}\nAccès : ${command.ownerOnly ? 'propriétaire uniquement 🔒' : 'selon les règles du groupe et du mode du bot'}\nDescription : ${command.description || 'Aucune description disponible'}`);
+  });
+
+  register('upper', 'CONVERTER', 'Convertir un texte en majuscules : .upper texte', async ({ chat, args }) => {
+    const value = args.join(' ').trim();
+    if (!value) throw new Error(`Utilise ${getPrefix()}upper texte`);
+    await sendText(chat, value.toLocaleUpperCase('fr-FR'));
+  });
+
+  register('lower', 'CONVERTER', 'Convertir un texte en minuscules : .lower texte', async ({ chat, args }) => {
+    const value = args.join(' ').trim();
+    if (!value) throw new Error(`Utilise ${getPrefix()}lower texte`);
+    await sendText(chat, value.toLocaleLowerCase('fr-FR'));
+  });
+
+  register('base64', 'CONVERTER', 'Encoder ou décoder du texte : .base64 encode|decode texte', async ({ chat, args }) => {
+    const action = (args[0] || '').toLowerCase();
+    const value = args.slice(1).join(' ').trim();
+    if (!['encode', 'decode'].includes(action) || !value || value.length > 3000) {
+      throw new Error(`Utilise ${getPrefix()}base64 encode Bonjour ou ${getPrefix()}base64 decode Qm9uam91cg==`);
+    }
+    if (action === 'encode') {
+      await sendText(chat, Buffer.from(value, 'utf8').toString('base64'));
+      return;
+    }
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value) || value.length % 4 === 1) {
+      throw new Error('Texte Base64 invalide.');
+    }
+    await sendText(chat, Buffer.from(value, 'base64').toString('utf8'));
+  });
+
+  register('urlencode', 'CONVERTER', 'Encoder un texte pour une URL : .urlencode texte', async ({ chat, args }) => {
+    const value = args.join(' ').trim();
+    if (!value) throw new Error(`Utilise ${getPrefix()}urlencode texte`);
+    await sendText(chat, encodeURIComponent(value));
+  });
+
+  register('urldecode', 'CONVERTER', 'Décoder un texte encodé pour une URL : .urldecode texte', async ({ chat, args }) => {
+    const value = args.join(' ').trim();
+    if (!value) throw new Error(`Utilise ${getPrefix()}urldecode texte`);
+    try {
+      await sendText(chat, decodeURIComponent(value));
+    } catch {
+      throw new Error('Texte URL invalide.');
+    }
+  });
+
+  register('auto', 'GENERAL', 'Activer ou désactiver la réaction automatique du bot', async ({ chat, args }) => {
+    const action = (args[0] || 'status').toLowerCase();
+    if (action === 'status') {
+      await sendText(chat, `⚡ Réaction automatique : ${settings.autoreact === false ? 'désactivée' : 'activée'}.`);
+      return;
+    }
+    if (!['on', 'off'].includes(action)) throw new Error(`Utilise ${getPrefix()}auto on, off ou status.`);
+    settings.autoreact = action === 'on';
+    await saveSettings();
+    await sendText(chat, `⚡ Réaction automatique ${settings.autoreact ? 'activée' : 'désactivée'}.`);
+  }, true);
+
+
 
   register('stats', 'SYSTEM', 'Show live bot and process statistics', async ({ chat }) => {
     const memory = process.memoryUsage();
@@ -204,6 +343,9 @@ export function registerMheEnhancements({
       `System memory : ${(os.totalmem() / 1024 / 1024 / 1024).toFixed(1)} GB`,
     ];
     await sendText(chat, lines.join('\n'));
+  });
+  register('mhestat', 'SYSTEM', 'Alias de .stats : statistiques système en direct', async (context) => {
+    await commands.get('stats').handler(context);
   });
 
   register('time', 'UTILITIES', 'Show the current time in a timezone', async ({ chat, args }) => {
@@ -244,6 +386,43 @@ export function registerMheEnhancements({
       await command.handler(context);
     }, true);
   }
+
+
+  for (const [alias, instruction, usage] of [
+    ['ai', 'Réponds comme un assistant utile et précis.', 'question'],
+    ['ask', 'Réponds directement à la question de l’utilisateur.', 'question'],
+    ['explain', 'Explique simplement, étape par étape, avec un exemple si utile.', 'notion à expliquer'],
+    ['summarize', 'Résume fidèlement le texte fourni en conservant les idées essentielles.', 'texte à résumer'],
+    ['code', 'Aide à écrire ou comprendre du code. Donne une solution claire et explique les choix.', 'question de programmation'],
+  ]) {
+    register(alias, 'AI & INTELLIGENCE', `Assistant IA : .${alias} ${usage}`, async ({ chat, actor, args }) => {
+      const prompt = args.join(' ').trim();
+      if (!prompt || prompt.length > 3500) throw new Error(`Utilise ${getPrefix()}${alias} ${usage} (3500 caractères maximum).`);
+      const now = Date.now();
+      const previous = aiCommandCooldowns.get(actor) || 0;
+      if (now - previous < 8000) throw new Error('Attends quelques secondes avant une nouvelle demande IA.');
+      aiCommandCooldowns.set(actor, now);
+      await sendText(chat, '🤖 M.H.E AI traite ta demande…');
+      const answer = await requestMheAI(prompt, instruction);
+      await sendText(chat, `🤖 M.H.E AI — ${alias.toUpperCase()}\n\n${answer}`);
+    });
+  }
+
+  register('translate', 'AI & INTELLIGENCE', 'Traduire : .translate langue cible | texte', async ({ chat, actor, args }) => {
+    const separator = args.indexOf('|');
+    const targetLanguage = (separator >= 0 ? args.slice(0, separator) : args.slice(0, 1)).join(' ').trim();
+    const sourceText = (separator >= 0 ? args.slice(separator + 1) : args.slice(1)).join(' ').trim();
+    if (!targetLanguage || !sourceText || sourceText.length > 3000) {
+      throw new Error(`Utilise ${getPrefix()}translate anglais | Bonjour, comment vas-tu ?`);
+    }
+    const now = Date.now();
+    const previous = aiCommandCooldowns.get(actor) || 0;
+    if (now - previous < 8000) throw new Error('Attends quelques secondes avant une nouvelle demande IA.');
+    aiCommandCooldowns.set(actor, now);
+    await sendText(chat, '🌍 Traduction en cours…');
+    const answer = await requestMheAI(sourceText, `Traduis fidèlement le texte en ${targetLanguage}. Retourne uniquement la traduction, sans commentaire.`);
+    await sendText(chat, `🌍 Traduction — ${targetLanguage}\n\n${answer}`);
+  });
 
   settings.todos ||= {};
   register('todo', 'PRODUCTIVITY', 'Manage your personal task list: add, list, done, clear', async ({ chat, actor, args }) => {
@@ -361,4 +540,67 @@ export function registerMheEnhancements({
     const rules = settings.groups?.[chat]?.rules;
     await sendText(chat, rules ? `📜 GROUP RULES\n\n${rules}` : `No rules saved. An admin can set them with ${getPrefix()}setrules <rules>.`);
   });
+
+  for (const [name, setting, label] of [
+    ['antilink', 'antilink', 'anti-liens'],
+    ['antispam', 'antispam', 'anti-spam'],
+    ['antitag', 'antitag', 'anti-mentions massives'],
+    ['antistatusmention', 'antistatusmention', 'anti-mentions de statut'],
+  ]) {
+    register(name, 'GROUPS', `Activer ou désactiver ${label} : .${name} on/off/status`, async ({ chat, actor, args }) => {
+      requireGroup(chat);
+      const context = await getGroupContext(chat, actor);
+      if (!context.actorIsAdmin) throw new Error('⛔ Cette commande est réservée aux administrateurs du groupe.');
+      settings.groups ||= {};
+      settings.groups[chat] ||= {};
+      const group = settings.groups[chat];
+      const action = (args[0] || 'status').toLowerCase();
+      if (action === 'status') {
+        await sendText(chat, `🛡️ ${label} : ${group[setting] ? 'activé' : 'désactivé'}.`);
+        return;
+      }
+      if (!['on', 'off'].includes(action)) throw new Error(`Utilise .${name} on, off ou status.`);
+      group[setting] = action === 'on';
+      await saveSettings();
+      await sendText(chat, `🛡️ ${label} ${group[setting] ? 'activé' : 'désactivé'} dans ce groupe.`);
+    });
+  }
+
+  register('kick', 'GROUPS', 'Retirer un membre (admin du groupe, mention ou réponse)', async ({ chat, actor, message }) => {
+    requireGroup(chat);
+    const context = await getGroupContext(chat, actor);
+    if (!context.actorIsAdmin) throw new Error('⛔ Seuls les administrateurs du groupe peuvent retirer un membre.');
+    if (!context.botIsAdmin) throw new Error('⚠️ M.H.E doit être administrateur pour retirer un membre.');
+    const info = message?.message?.extendedTextMessage?.contextInfo || {};
+    const targets = [...new Set([...(info.mentionedJid || []), ...(info.participant ? [info.participant] : [])])];
+    if (targets.length !== 1) throw new Error(`Mentionne un seul membre ou réponds à son message : ${getPrefix()}kick @membre`);
+    const target = targets[0];
+    const numberOf = (jid = '') => String(jid).split('@')[0].split(':')[0].replace(/\D/g, '');
+    const targetNumber = numberOf(target);
+    const targetInfo = context.participants?.find((item) => numberOf(item.id || item.jid) === targetNumber);
+    const botNumber = numberOf(getSocket()?.user?.id || '');
+    if (targetNumber && botNumber && targetNumber === botNumber) {
+      throw new Error('⛔ M.H.E ne peut pas se retirer lui-même du groupe.');
+    }
+    if (targetInfo?.admin || targetInfo?.isAdmin || targetInfo?.isSuperAdmin) {
+      throw new Error('⛔ M.H.E ne peut pas retirer un administrateur du groupe.');
+    }
+    await getSocket().groupParticipantsUpdate(chat, [target], 'remove');
+    await sendText(chat, `✅ Demande de retrait envoyée pour @${target.split('@')[0]}.`, { mentions: [target] });
+  });
+
+  for (const [name, setting, success] of [
+    ['lockgc', 'announcement', '🔒 Groupe fermé : seuls les administrateurs peuvent envoyer des messages.'],
+    ['unlockgc', 'not_announcement', '🔓 Groupe ouvert : tous les membres peuvent envoyer des messages.'],
+  ]) {
+    register(name, 'GROUPS', name === 'lockgc' ? 'Réserver les messages aux administrateurs' : 'Autoriser tous les membres à envoyer des messages', async ({ chat, actor }) => {
+      requireGroup(chat);
+      const context = await getGroupContext(chat, actor);
+      if (!context.actorIsAdmin) throw new Error('⛔ Cette commande est réservée aux administrateurs du groupe.');
+      if (!context.botIsAdmin) throw new Error('⚠️ M.H.E doit être administrateur pour modifier les paramètres du groupe.');
+      await getSocket().groupSettingUpdate(chat, setting);
+      await sendText(chat, success);
+    });
+  }
+
 }

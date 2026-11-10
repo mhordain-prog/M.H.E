@@ -25,6 +25,7 @@ test('registers all three M.H.E GOLD V2 commands', () => {
   assert.ok(commands.has('mheai'));
   assert.ok(commands.has('mheghost'));
   assert.ok(commands.has('mheclone'));
+  assert.ok(commands.has('mhetts'));
   assert.equal(commands.get('mheai').ownerOnly, true);
 });
 
