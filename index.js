@@ -48,6 +48,7 @@ registerReferrals({ app });
 app.get('/', (_req, res) => res.sendFile(path.resolve('index.html')));
 
 let socket;
+let whatsappConnection = 'starting';
 let authState;
 let saveCreds;
 let reconnectTimer;
@@ -942,7 +943,7 @@ app.get('/health', (_req, res) => {
   res.json({
     ok: true,
     name: BOT_NAME,
-    whatsapp: socket?.user ? 'connected' : 'waiting',
+    whatsapp: whatsappConnection === 'open' ? 'connected' : whatsappConnection === 'close' ? 'disconnected' : 'waiting',
     registered: Boolean(authState?.creds?.registered),
     commands: commands.size,
     mode,
@@ -994,12 +995,17 @@ app.post('/api/pair', async (req, res) => {
   }
 });
 app.get('/api/status', (_req, res) => {
-  res.json({ connected: Boolean(socket?.user), registered: Boolean(authState?.creds?.registered) });
+  res.json({
+    connected: whatsappConnection === 'open',
+    registered: Boolean(authState?.creds?.registered),
+    state: whatsappConnection,
+  });
 });
 const server = app.listen(PORT, '0.0.0.0', () => logger.info({ port: PORT }, 'M.H.E. web server started'));
 
 async function startWhatsApp() {
   if (reconnectTimer) clearTimeout(reconnectTimer);
+  whatsappConnection = 'connecting';
   await fs.mkdir(SESSION_DIR, { recursive: true, mode: 0o700 });
   if (!sessionRestoredOnce) {
     const restored = await sessionStore.restore(SESSION_DIR);
@@ -1034,8 +1040,10 @@ async function startWhatsApp() {
   });
   socket.ev.on('creds.update', saveCreds);
   socket.ev.on('connection.update', ({ connection, lastDisconnect }) => {
+    if (connection) whatsappConnection = connection;
     if (connection === 'open') logger.info('WhatsApp connected');
     if (connection === 'close') {
+      whatsappConnection = 'close';
       socket = undefined;
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       if (statusCode !== DisconnectReason.loggedOut) {
@@ -1202,7 +1210,10 @@ registerMheEnhancements({
   getStartedAt: () => STARTED_AT, getGroupContext: groupContext, requireGroup,
 });
 
-await startWhatsApp().catch((error) => logger.error({ err: error }, 'WhatsApp startup failed'));
+await startWhatsApp().catch((error) => {
+  whatsappConnection = 'error';
+  logger.error({ err: error }, 'WhatsApp startup failed');
+});
 process.on('SIGTERM', async () => {
   server.close();
   if (sessionSyncTimer) clearInterval(sessionSyncTimer);
