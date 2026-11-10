@@ -21,7 +21,7 @@ function setup() {
 
 test('registers the enhanced menu and useful English command families', () => {
   const { commands } = setup();
-  for (const name of ['menu', 'menucat', 'searchcmd', 'stats', 'time', 'date', 'weather', 'wiki', 'todo', 'note', 'groupinfo', 'members', 'setrules', 'rules', 'admins', 'setprefix', 'setbotname', 'setownername', 'setmode']) {
+  for (const name of ['menu', 'menucat', 'searchcmd', 'auto', 'stats', 'mhestat', 'time', 'date', 'weather', 'wiki', 'todo', 'note', 'groupinfo', 'members', 'setrules', 'rules', 'admins', 'antilink', 'antispam', 'antitag', 'antistatusmention', 'kick', 'lockgc', 'unlockgc', 'ai', 'ask', 'explain', 'summarize', 'code', 'translate']) {
     assert.ok(commands.has(name), name);
   }
 });
@@ -31,9 +31,15 @@ test('menu sends a live category selector with a safe text fallback', async () =
   await commands.get('menu').handler({ chat: 'test@s.whatsapp.net' });
   const interactive = sent.find((item) => item.payload?.sections);
   assert.ok(interactive);
-  assert.equal(interactive.payload.buttonText, 'OPEN MENU');
-  assert.ok(interactive.payload.sections[0].rows.some((row) => row.rowId.startsWith('mhecat:')));
+  assert.equal(interactive.payload.buttonText, 'OUVRIR LE MENU');
+  assert.ok(interactive.payload.sections[0].rows.some((row) => row.rowId === 'mhecat:1'));
+  assert.ok(interactive.payload.sections[0].rows.length <= 10);
   assert.ok(sent.some((item) => /M.H.E-MD GOLD/.test(item.text || '')));
+  const listing = sent.find((item) => /MENU DES COMMANDES/.test(item.text || ''))?.text || '';
+  assert.match(listing, /BOT/);
+  assert.match(listing, /GROUP MANAGER/);
+  assert.match(listing, /AI/);
+  assert.doesNotMatch(listing, /GENERAL|PRODUCTIVITY|SYSTEM/);
 });
 
 test('todo list is stored per sender and persisted', async () => {
@@ -61,4 +67,20 @@ test('group rules require an administrator', async () => {
   const { commands, settings } = setup();
   await commands.get('setrules').handler({ chat: 'g@g.us', actor: 'admin@s.whatsapp.net', args: ['Be', 'respectful'] });
   assert.equal(settings.groups['g@g.us'].rules, 'Be respectful');
+});
+
+test('category navigation uses human numbering and paginates long categories', async () => {
+  const { commands, sent } = setup();
+  await commands.get('menucat').handler({ chat: 'test@s.whatsapp.net', args: ['1'] });
+  assert.match(sent.at(-1).text, /BOT/);
+  assert.match(sent.at(-1).text, /Page 1\/1/);
+  await commands.get('menucat').handler({ chat: 'test@s.whatsapp.net', args: ['0'] });
+  assert.match(sent.at(-1).text, /Choisis un numéro de catégorie/);
+});
+
+test('anti-link setting is stored per group and requires a group admin', async () => {
+  const { commands, settings, getSaved } = setup();
+  await commands.get('antilink').handler({ chat: 'g@g.us', actor: 'admin@s.whatsapp.net', args: ['on'] });
+  assert.equal(settings.groups['g@g.us'].antilink, true);
+  assert.equal(getSaved(), 1);
 });
