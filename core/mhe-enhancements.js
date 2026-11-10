@@ -112,7 +112,7 @@ const aiCommandCooldowns = new Map();
 async function requestMheAI(prompt, instruction = 'Réponds clairement en français, sauf si la demande est dans une autre langue.') {
   const apiKey = process.env.MHE_AI_API_KEY || process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error('Configure MHE_AI_API_KEY ou OPENAI_API_KEY dans les variables secrètes de Render pour activer les commandes IA.');
-  const endpoint = (process.env.MHE_AI_BASE_URL || 'https://api.openai.com/v1').replace(/\\/+$/, '');
+  const endpoint = (process.env.MHE_AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
   const model = process.env.MHE_AI_MODEL || 'gpt-4o-mini';
   const response = await fetch(`${endpoint}/chat/completions`, {
     method: 'POST',
