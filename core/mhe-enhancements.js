@@ -39,7 +39,7 @@ function displayCategory(category) {
 }
 
 function getCategories(commands) {
-  const categories = new Map();
+  const categories = new Map(CATEGORY_ORDER.filter((category) => category !== 'OTHER').map((category) => [category, []]));
   for (const command of commands.values()) {
     const category = normalizeCategory(command.category || 'OTHER');
     if (!categories.has(category)) categories.set(category, []);
@@ -231,6 +231,13 @@ export function registerMheEnhancements({
     if (!Number.isInteger(page) || page < 1 || page > pages) {
       throw new Error(`Page invalide. Utilise ${getPrefix()}menucat ${index + 1} 1 à ${pages}.`);
     }
+    if (!items.length) {
+      const notes = category === 'DOWNLOADER'
+        ? 'Le fournisseur de téléchargement n’est pas encore configuré. Aucune commande de téléchargement n’est annoncée comme fonctionnelle.'
+        : 'Aucune commande active dans cette catégorie pour le moment.';
+      await sendText(chat, `👑 M.H.E GOLD — ${displayCategory(category)}\n\n${notes}\n\nRetour : ${getPrefix()}menu`);
+      return;
+    }
     const pageItems = items.slice((page - 1) * pageSize, page * pageSize);
     const lines = pageItems.map((item) => `• ${getPrefix()}${item.name} — ${item.description || 'Description indisponible'}`);
     const next = page < pages ? `\nPage suivante : ${getPrefix()}menucat ${index + 1} ${page + 1}` : '';
@@ -248,6 +255,61 @@ export function registerMheEnhancements({
     await sendText(chat, found.length
       ? `🔎 COMMAND SEARCH — ${found.length} result(s)\n\n${found.map((item) => `• ${getPrefix()}${item.name} — ${item.description || item.category}`).join('\n')}`
       : `No command found for “${query}”.`);
+  });
+
+  register('help', 'GENERAL', 'Afficher l’aide générale ou celle d’une commande', async ({ chat, args }) => {
+    const requested = (args[0] || '').toLowerCase().replace(/^\\./, '');
+    if (!requested) {
+      await sendText(chat, `👑 M.H.E GOLD — AIDE\n\n• ${getPrefix()}menu : afficher les catégories\n• ${getPrefix()}menucat numéro : ouvrir une catégorie\n• ${getPrefix()}searchcmd mot-clé : rechercher une commande\n• ${getPrefix()}help commande : afficher l’aide d’une commande`);
+      return;
+    }
+    const command = commands.get(requested);
+    if (!command) throw new Error(`Commande inconnue : ${getPrefix()}${requested}. Utilise ${getPrefix()}searchcmd ${requested}.`);
+    await sendText(chat, `📖 AIDE — ${getPrefix()}${command.name}\nCatégorie : ${displayCategory(normalizeCategory(command.category))}\nDescription : ${command.description || 'Aucune description disponible'}`);
+  });
+
+  register('upper', 'CONVERTER', 'Convertir un texte en majuscules : .upper texte', async ({ chat, args }) => {
+    const value = args.join(' ').trim();
+    if (!value) throw new Error(`Utilise ${getPrefix()}upper texte`);
+    await sendText(chat, value.toLocaleUpperCase('fr-FR'));
+  });
+
+  register('lower', 'CONVERTER', 'Convertir un texte en minuscules : .lower texte', async ({ chat, args }) => {
+    const value = args.join(' ').trim();
+    if (!value) throw new Error(`Utilise ${getPrefix()}lower texte`);
+    await sendText(chat, value.toLocaleLowerCase('fr-FR'));
+  });
+
+  register('base64', 'CONVERTER', 'Encoder ou décoder du texte : .base64 encode|decode texte', async ({ chat, args }) => {
+    const action = (args[0] || '').toLowerCase();
+    const value = args.slice(1).join(' ').trim();
+    if (!['encode', 'decode'].includes(action) || !value || value.length > 3000) {
+      throw new Error(`Utilise ${getPrefix()}base64 encode Bonjour ou ${getPrefix()}base64 decode Qm9uam91cg==`);
+    }
+    if (action === 'encode') {
+      await sendText(chat, Buffer.from(value, 'utf8').toString('base64'));
+      return;
+    }
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value) || value.length % 4 === 1) {
+      throw new Error('Texte Base64 invalide.');
+    }
+    await sendText(chat, Buffer.from(value, 'base64').toString('utf8'));
+  });
+
+  register('urlencode', 'CONVERTER', 'Encoder un texte pour une URL : .urlencode texte', async ({ chat, args }) => {
+    const value = args.join(' ').trim();
+    if (!value) throw new Error(`Utilise ${getPrefix()}urlencode texte`);
+    await sendText(chat, encodeURIComponent(value));
+  });
+
+  register('urldecode', 'CONVERTER', 'Décoder un texte encodé pour une URL : .urldecode texte', async ({ chat, args }) => {
+    const value = args.join(' ').trim();
+    if (!value) throw new Error(`Utilise ${getPrefix()}urldecode texte`);
+    try {
+      await sendText(chat, decodeURIComponent(value));
+    } catch {
+      throw new Error('Texte URL invalide.');
+    }
   });
 
   register('auto', 'GENERAL', 'Activer ou désactiver la réaction automatique du bot', async ({ chat, args }) => {
@@ -513,7 +575,13 @@ export function registerMheEnhancements({
     const targets = [...new Set([...(info.mentionedJid || []), ...(info.participant ? [info.participant] : [])])];
     if (targets.length !== 1) throw new Error(`Mentionne un seul membre ou réponds à son message : ${getPrefix()}kick @membre`);
     const target = targets[0];
-    const targetInfo = context.participants?.find((item) => item.id === target || item.jid === target);
+    const numberOf = (jid = '') => String(jid).split('@')[0].split(':')[0].replace(/\\D/g, '');
+    const targetNumber = numberOf(target);
+    const targetInfo = context.participants?.find((item) => numberOf(item.id || item.jid) === targetNumber);
+    const botNumber = numberOf(getSocket()?.user?.id || '');
+    if (targetNumber && botNumber && targetNumber === botNumber) {
+      throw new Error('⛔ M.H.E ne peut pas se retirer lui-même du groupe.');
+    }
     if (targetInfo?.admin || targetInfo?.isAdmin || targetInfo?.isSuperAdmin) {
       throw new Error('⛔ M.H.E ne peut pas retirer un administrateur du groupe.');
     }
