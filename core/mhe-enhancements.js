@@ -239,7 +239,7 @@ export function registerMheEnhancements({
       return;
     }
     const pageItems = items.slice((page - 1) * pageSize, page * pageSize);
-    const lines = pageItems.map((item) => `• ${getPrefix()}${item.name} — ${item.description || 'Description indisponible'}`);
+    const lines = pageItems.map((item) => `• ${getPrefix()}${item.name}${item.ownerOnly ? ' 🔒 PROPRIÉTAIRE' : ''} — ${item.description || 'Description indisponible'}`);
     const next = page < pages ? `\nPage suivante : ${getPrefix()}menucat ${index + 1} ${page + 1}` : '';
     await sendText(chat, `👑 M.H.E GOLD — ${displayCategory(category)}\n📄 Page ${page}/${pages}\n\n${lines.join('\n')}\n\nTotal : ${items.length} commande(s)${next}\n\nRetour : ${getPrefix()}menu`);
   });
@@ -265,7 +265,7 @@ export function registerMheEnhancements({
     }
     const command = commands.get(requested);
     if (!command) throw new Error(`Commande inconnue : ${getPrefix()}${requested}. Utilise ${getPrefix()}searchcmd ${requested}.`);
-    await sendText(chat, `📖 AIDE — ${getPrefix()}${command.name}\nCatégorie : ${displayCategory(normalizeCategory(command.category))}\nDescription : ${command.description || 'Aucune description disponible'}`);
+    await sendText(chat, `📖 AIDE — ${getPrefix()}${command.name}\nCatégorie : ${displayCategory(normalizeCategory(command.category))}\nAccès : ${command.ownerOnly ? 'propriétaire uniquement 🔒' : 'selon les règles du groupe et du mode du bot'}\nDescription : ${command.description || 'Aucune description disponible'}`);
   });
 
   register('upper', 'CONVERTER', 'Convertir un texte en majuscules : .upper texte', async ({ chat, args }) => {
