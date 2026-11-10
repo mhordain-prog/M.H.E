@@ -7,7 +7,7 @@ function setup() {
   const sent = [];
   const settings = {};
   let saved = 0;
-  const register = (name, category, description, handler) => commands.set(name, { name, category, description, handler });
+  const register = (name, category, description, handler, ownerOnly = false) => commands.set(name, { name, category, description, handler, ownerOnly });
   registerMheEnhancements({
     register, commands, sendText: async (chat, text, options) => sent.push({ chat, text, options }),
     getSocket: () => ({ user: { id: 'bot@s.whatsapp.net' }, profilePictureUrl: async () => { throw new Error('no picture'); }, sendMessage: async (chat, payload) => { sent.push({ chat, payload }); } }),
@@ -104,4 +104,11 @@ test('empty downloader category is explicit rather than advertising fake command
   const { commands, sent } = setup();
   await commands.get('menucat').handler({ chat: 'test@s.whatsapp.net', args: ['5'] });
   assert.match(sent.at(-1).text, /fournisseur de téléchargement n’est pas encore configuré/);
+});
+
+test('owner-only commands are clearly marked in category details', async () => {
+  const { commands, sent } = setup();
+  commands.set('secret', { name: 'secret', category: 'OWNER', description: 'owner operation', ownerOnly: true });
+  await commands.get('menucat').handler({ chat: 'test@s.whatsapp.net', args: ['1'] });
+  assert.match(sent.at(-1).text, /secret 🔒 PROPRIÉTAIRE/);
 });
