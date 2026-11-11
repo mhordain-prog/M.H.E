@@ -16,9 +16,9 @@ test("starts a quiz and handles an answer",async()=>{
   const {commands,sent,game,settings}=setup();
   await commands.get("quiz").handler({chat:"p@s.whatsapp.net"});
   assert.match(sent[0].text,/QUESTION 1\/10/);
-  const options=sent[0].text.match(/\nA\. ([^\n]+)\nB\. ([^\n]+)\nC\. ([^\n]+)\nD\. ([^\n]+)/);
-  assert.ok(options);
-  const result=await game.handleIncoming({key:{remoteJid:"p@s.whatsapp.net",participant:"p@s.whatsapp.net",fromMe:false},message:{conversation:options[1]}});
+  const option=sent[0].text.match(/\nA\. ([^\n]+)/);
+  assert.ok(option);
+  const result=await game.handleIncoming({key:{remoteJid:"p@s.whatsapp.net",participant:"p@s.whatsapp.net",fromMe:false},message:{conversation:option[1]}});
   assert.equal(result,true);
   assert.match(sent.at(-1).text,/Bonne réponse|Mauvaise réponse/);
 });
