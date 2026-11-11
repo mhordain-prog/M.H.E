@@ -147,7 +147,7 @@ export function registerMheFunGames({register,sendText,settings,saveSettings,get
       "╠═══════════════════════════════╣",
       "Réponds avec le numéro de ton choix.",
       "Tu peux aussi écrire .quiz anime, .quiz sons ou .quiz tout.",
-      "10 questions • +10 points par bonne réponse",
+      "Jusqu’à 10 questions • +10 points par bonne réponse",
       "╚═══════════════════════════════╝"
     ].join("\n"));
   }
