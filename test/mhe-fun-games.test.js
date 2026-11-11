@@ -20,7 +20,7 @@ test("starts a quiz and handles an answer",async()=>{
   assert.ok(options);
   const result=await game.handleIncoming({key:{remoteJid:"p@s.whatsapp.net",participant:"p@s.whatsapp.net",fromMe:false},message:{conversation:options[1]}});
   assert.equal(result,true);
-  assert.ok(settings.mheFunGames);
+  assert.match(sent.at(-1).text,/Bonne réponse|Mauvaise réponse/);
 });
 test("ignores unrelated text when no game is active",async()=>{
   const {game}=setup();
