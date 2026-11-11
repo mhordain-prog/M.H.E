@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import pino from 'pino';
 import { registerMheGoldV2 } from './core/mhe-gold-v2.js';
+import { registerMheFunGames } from './core/mhe-fun-games.js';
 import { registerMheEnhancements } from './core/mhe-enhancements.js';
 import { registerControlCenter } from './core/control-center.js';
 import { createWarningManager } from './core/warnings.js';
@@ -175,7 +176,7 @@ async function executeCommand(message, commandName, args, isOwner) {
   if (!command) return;
   const chat = message.key.remoteJid;
   const actor = senderJid(message);
-  if (mode === 'private' && !isOwner) return;
+  if (mode === 'private' && !isOwner && command.category !== 'FUN & GAMES') return;
   if (command.ownerOnly && !isOwner) {
     await sendText(chat, '⛔ Cette commande est réservée au propriétaire du bot.');
     return;
@@ -1146,6 +1147,7 @@ async function startWhatsApp() {
           continue;
         }
       }
+      if (await handleMheFunGamesIncoming(message)) continue;
       if (await handleMheGoldIncoming(message, { mode })) continue;
       if (!text.startsWith(PREFIX)) continue;
       const [name, ...args] = text.slice(PREFIX.length).trim().split(/\s+/);
@@ -1160,6 +1162,9 @@ async function startWhatsApp() {
 }
 
 await loadSettings();
+const handleMheFunGamesIncoming = registerMheFunGames({
+  register, sendText, settings, saveSettings, getPrefix: () => PREFIX,
+});
 const handleMheGoldIncoming = registerMheGoldV2({
   register,
   sendText,
