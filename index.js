@@ -1147,7 +1147,7 @@ async function startWhatsApp() {
           continue;
         }
       }
-      if (await handleMheFunGamesIncoming(message)) continue;
+      if (await handleMheFunGamesIncoming.handleIncoming(message)) continue;
       if (await handleMheGoldIncoming(message, { mode })) continue;
       if (!text.startsWith(PREFIX)) continue;
       const [name, ...args] = text.slice(PREFIX.length).trim().split(/\s+/);
