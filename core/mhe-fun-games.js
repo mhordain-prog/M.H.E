@@ -39,7 +39,7 @@ const BANK = [
 {c:"science",d:"facile",q:"Quel est l’organe principal de la respiration chez l’être humain ?",a:["Le cœur","Les poumons","Le foie","L’estomac"],k:1,e:"Les poumons assurent les échanges gazeux respiratoires."},
 {c:"geo",d:"difficile",q:"Quel pays possède la plus grande superficie du monde ?",a:["Canada","Chine","États-Unis","Russie"],k:3,e:"La Russie est le plus vaste pays du monde par superficie."},
 {c:"math",d:"facile",q:"Combien font 144 ÷ 12 ?",a:["10","11","12","14"],k:2,e:"144 ÷ 12 = 12."},
-{c:"histoire",d:"difficile",q:"En quelle année l’Organisation des Nations unies a-t-elle été fondée ?",a:["1919","1939","1945","1955"],k:2,e:"L’ONU a été fondée en 1945."}
+{c:"histoire",d:"difficile",q:"En quelle année l’Organisation des Nations unies a-t-elle été fondée ?",a:["1919","1939","1945","1955"],k:2,e:"L’ONU a été fondée en 1945."},
   {c:"anime",d:"facile",q:"Dans Naruto, comment s’appelle le démon renard scellé en Naruto ?",a:["Shukaku","Kurama","Gyuki","Matatabi"],k:1,e:"Il s’appelle Kurama, le renard à neuf queues."},
   {c:"anime",d:"facile",q:"Dans One Piece, quel est le rêve de Luffy ?",a:["Devenir Hokage","Devenir Roi des Pirates","Trouver les Dragon Balls","Devenir Amiral"],k:1,e:"Luffy veut devenir le Roi des Pirates."},
   {c:"anime",d:"moyen",q:"Dans Dragon Ball, qui est le père de Gohan ?",a:["Vegeta","Piccolo","Son Goku","Trunks"],k:2,e:"Son Goku est le père de Gohan."},
