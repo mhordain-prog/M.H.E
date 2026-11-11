@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/parrainage", "destination": "/parrainage.html" },
+    { "source": "/r/:code", "destination": "/api/r/:code" }
+  ]
+}

@@ -116,8 +116,9 @@ La page responsive noir et or est servie sur `/parrainage`. Elle permet de crée
 
 ### Configuration requise
 
-1. Dans le projet Supabase déjà utilisé par M.H.E, ouvre SQL Editor et exécute le fichier `supabase/referrals.sql`.
-2. Vérifie que le projet utilise les variables Render `SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` (les mêmes que le stockage de session). La clé service_role reste uniquement dans les secrets Render.
-3. Déploie la branche après revue et vérifie `/parrainage`, la création d'un code et le suivi d'une visite.
+1. Dans le projet Supabase utilisé par M.H.E, ouvre SQL Editor et exécute une fois `supabase/referrals.sql`.
+2. Dans Render, configure `SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` pour le bot. Dans les variables d’environnement du projet Vercel du site, configure aussi ces deux valeurs pour ses fonctions API. La clé `service_role` reste secrète et ne doit jamais être exposée dans le navigateur ni ajoutée au dépôt.
+3. Pour utiliser l’endpoint de validation manuelle, configure aussi `CONTROL_PANEL_TOKEN` côté hébergement. Le nombre de parrainages validés doit être confirmé par l’équipe M.H.E.
+4. Déploie le dépôt à sa racine sur Vercel, puis vérifie `/parrainage`, la création d’un code et une visite via `/r/CODE`.
 
-La page peut s'afficher sans Supabase, mais la création de liens et les statistiques renvoient une erreur explicite tant que la table n'est pas créée et que les variables ne sont pas configurées. L'endpoint de validation des parrainages est réservé au propriétaire via `CONTROL_PANEL_TOKEN`; le nombre validé doit être confirmé manuellement.
+La page peut s’afficher sans Supabase, mais la création de liens et les statistiques renvoient une erreur explicite tant que la table n’est pas créée ou que les variables ne sont pas configurées. L’API Vercel utilise les fonctions de `api/`; `vercel.json` route `/parrainage` vers la page et `/r/CODE` vers le suivi.
