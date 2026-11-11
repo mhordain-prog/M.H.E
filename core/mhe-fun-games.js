@@ -40,6 +40,30 @@ const BANK = [
 {c:"geo",d:"difficile",q:"Quel pays possède la plus grande superficie du monde ?",a:["Canada","Chine","États-Unis","Russie"],k:3,e:"La Russie est le plus vaste pays du monde par superficie."},
 {c:"math",d:"facile",q:"Combien font 144 ÷ 12 ?",a:["10","11","12","14"],k:2,e:"144 ÷ 12 = 12."},
 {c:"histoire",d:"difficile",q:"En quelle année l’Organisation des Nations unies a-t-elle été fondée ?",a:["1919","1939","1945","1955"],k:2,e:"L’ONU a été fondée en 1945."}
+  {c:"anime",d:"facile",q:"Dans Naruto, comment s’appelle le démon renard scellé en Naruto ?",a:["Shukaku","Kurama","Gyuki","Matatabi"],k:1,e:"Il s’appelle Kurama, le renard à neuf queues."},
+  {c:"anime",d:"facile",q:"Dans One Piece, quel est le rêve de Luffy ?",a:["Devenir Hokage","Devenir Roi des Pirates","Trouver les Dragon Balls","Devenir Amiral"],k:1,e:"Luffy veut devenir le Roi des Pirates."},
+  {c:"anime",d:"moyen",q:"Dans Dragon Ball, qui est le père de Gohan ?",a:["Vegeta","Piccolo","Son Goku","Trunks"],k:2,e:"Son Goku est le père de Gohan."},
+  {c:"anime",d:"moyen",q:"Dans Demon Slayer, quelle est la sœur de Tanjiro ?",a:["Sakura","Nezuko","Mikasa","Nami"],k:1,e:"Sa sœur s’appelle Nezuko Kamado."},
+  {c:"anime",d:"facile",q:"Dans Pokémon, quel est le Pokémon emblématique de Sacha ?",a:["Dracaufeu","Pikachu","Mewtwo","Carapuce"],k:1,e:"Le compagnon emblématique de Sacha est Pikachu."},
+  {c:"anime",d:"difficile",q:"Dans L’Attaque des Titans, comment s’appelle la ville natale d’Eren ?",a:["Shiganshina","Trost","Mitras","Liberio"],k:0,e:"Eren vient du district de Shiganshina."},
+  {c:"anime",d:"moyen",q:"Dans Jujutsu Kaisen, qui est le professeur aux cheveux blancs ?",a:["Megumi Fushiguro","Kento Nanami","Satoru Gojo","Yuji Itadori"],k:2,e:"Il s’agit de Satoru Gojo."},
+  {c:"anime",d:"facile",q:"Dans Naruto, quel est le nom du village de Naruto ?",a:["Konoha","Suna","Kiri","Iwa"],k:0,e:"Naruto vient de Konoha, le village caché de la Feuille."},
+  {c:"sons",d:"facile",q:"Quel appareil sert principalement à écouter de la musique sans déranger les autres ?",a:["Un casque audio","Une imprimante","Un clavier","Un routeur"],k:0,e:"Un casque audio permet une écoute individuelle."},
+  {c:"sons",d:"moyen",q:"Comment appelle-t-on une personne qui crée et interprète des chansons ?",a:["Un architecte","Un chanteur ou une chanteuse","Un arbitre","Un mécanicien"],k:1,e:"Un chanteur ou une chanteuse interprète des chansons."},
+  {c:"sons",d:"facile",q:"Quel instrument possède généralement six cordes ?",a:["La flûte","La guitare","Le tambour","Le piano"],k:1,e:"La guitare possède généralement six cordes."},
+  {c:"sons",d:"moyen",q:"Quel terme désigne la vitesse d’un morceau de musique ?",a:["Le tempo","Le décor","Le refrain","Le timbre"],k:0,e:"Le tempo indique la vitesse de la musique."},
+  {c:"sons",d:"facile",q:"Comment appelle-t-on la partie qui revient régulièrement dans une chanson ?",a:["Le couplet","Le refrain","L’introduction","Le silence"],k:1,e:"La partie répétée est le refrain."},
+  {c:"sons",d:"difficile",q:"Quel instrument est associé aux touches blanches et noires ?",a:["Le piano","La trompette","La batterie","Le violon"],k:0,e:"Le piano possède des touches blanches et noires."},
+  {c:"sons",d:"moyen",q:"Quel format audio est connu pour sa compression avec perte ?",a:["WAV","MP3","FLAC sans perte","AIFF non compressé"],k:1,e:"Le MP3 est un format de compression audio avec perte."},
+  {c:"sons",d:"facile",q:"Quel élément donne le rythme dans de nombreux groupes de musique ?",a:["La batterie","Le dictionnaire","Le microscope","Le compas"],k:0,e:"La batterie contribue à marquer le rythme."},
+  {c:"vie",d:"facile",q:"Quel comportement aide à résoudre un désaccord calmement ?",a:["Écouter l’autre","Crier plus fort","Ignorer tout le monde","Se moquer"],k:0,e:"L’écoute aide à comprendre les points de vue et à dialoguer."},
+  {c:"vie",d:"moyen",q:"Quel document présente généralement les expériences et compétences d’une personne qui cherche un emploi ?",a:["Un CV","Une facture","Un ticket","Un menu"],k:0,e:"Le curriculum vitæ présente le parcours et les compétences."},
+  {c:"vie",d:"facile",q:"Quel réflexe protège mieux ses comptes en ligne ?",a:["Partager son mot de passe","Utiliser un mot de passe unique et solide","Cliquer sur tous les liens","Publier ses codes"],k:1,e:"Un mot de passe unique et solide réduit les risques d’accès non autorisé."},
+  {c:"vie",d:"moyen",q:"Face à une information douteuse sur Internet, que faut-il faire ?",a:["La partager immédiatement","Vérifier plusieurs sources fiables","Croire le premier commentaire","Changer le titre"],k:1,e:"Il faut vérifier l’information auprès de plusieurs sources fiables."},
+  {c:"vie",d:"facile",q:"Quelle qualité aide à tenir ses engagements ?",a:["La ponctualité","La distraction","L’impatience","L’oubli volontaire"],k:0,e:"La ponctualité aide à respecter les engagements."},
+  {c:"vie",d:"moyen",q:"Quel est un bon premier pas pour organiser un projet ?",a:["Définir un objectif","Tout faire au hasard","Éviter le calendrier","Ne rien noter"],k:0,e:"Un objectif clair aide à planifier les étapes."},
+  {c:"vie",d:"facile",q:"Quand quelqu’un te confie un problème, quelle attitude est la plus respectueuse ?",a:["Se moquer","Écouter sans juger","Répandre l’histoire","L’interrompre"],k:1,e:"Écouter sans juger est une attitude respectueuse."},
+  {c:"vie",d:"moyen",q:"Pourquoi est-il utile de comparer les prix avant un achat ?",a:["Pour choisir de façon éclairée","Pour acheter le premier produit","Pour oublier son budget","Pour payer deux fois"],k:0,e:"Comparer les prix aide à respecter son budget et à choisir."},
 ];
 
 const RIDDLES = [
@@ -97,13 +121,51 @@ export function registerMheFunGames({register,sendText,settings,saveSettings,get
       "Réponds directement dans le chat. Préfixe : "+prefix()
     ].join("\n"));
   });
-  register("quiz","FUN & GAMES","Lancer un quiz général de 10 questions",async({chat})=>startQuiz(chat,null,"QUIZ GÉNÉRAL"));
+  const quizChoices=[
+    {key:"anime",cat:"anime",title:"ANIMÉS & MANGAS",emoji:"🍥"},
+    {key:"sons",cat:"sons",title:"MUSIQUE & SONS",emoji:"🎵"},
+    {key:"vie",cat:"vie",title:"VIE QUOTIDIENNE",emoji:"🌟"},
+    {key:"histoire",cat:"histoire",title:"HISTOIRE",emoji:"🏛️"},
+    {key:"math",cat:"math",title:"MATHÉMATIQUES",emoji:"➗"},
+    {key:"geo",cat:"geo",title:"GÉOGRAPHIE",emoji:"🌍"},
+    {key:"science",cat:"science",title:"SCIENCES",emoji:"🔬"},
+    {key:"sport",cat:"sport",title:"SPORT",emoji:"🏆"},
+    {key:"culture",cat:"culture",title:"CULTURE GÉNÉRALE",emoji:"🧠"},
+    {key:"langue",cat:"langue",title:"FRANÇAIS & LANGUES",emoji:"📚"},
+    {key:"logique",cat:"logique",title:"LOGIQUE & ÉNIGMES",emoji:"🧩"},
+    {key:"vraioufaux",cat:"vraioufaux",title:"VRAI OU FAUX",emoji:"⚖️"},
+    {key:"tout",cat:null,title:"TOUT MÉLANGÉ",emoji:"👑"}
+  ];
+  function showQuizMenu(chat) {
+    sessions.set(chat,{type:"quiz-menu",startedAt:Date.now()});
+    const lines=quizChoices.map((x,i)=>(i+1)+". "+x.emoji+" "+x.title);
+    return sendText(chat,[
+      "╔══════ 👑 M.H.E GOLD QUIZ ══════╗",
+      "        CHOISIS TON UNIVERS",
+      "╠═══════════════════════════════╣",
+      ...lines,
+      "╠═══════════════════════════════╣",
+      "Réponds avec le numéro de ton choix.",
+      "Tu peux aussi écrire .quiz anime, .quiz sons ou .quiz tout.",
+      "10 questions • +10 points par bonne réponse",
+      "╚═══════════════════════════════╝"
+    ].join("\n"));
+  }
+  register("quiz","FUN & GAMES","Afficher les catégories de quiz",async({chat,args})=>{
+    const key=norm((args||[]).join(" "));
+    if(!key) return showQuizMenu(chat);
+    const aliases={anime:"anime",animé:"anime",animes:"anime",manga:"anime",mangas:"anime",sons:"sons",son:"sons",musique:"sons",music:"sons",vie:"vie",quotidien:"vie",histoire:"histoire",math:"math",maths:"math",mathematiques:"math",geo:"geo",geographie:"geo",géographie:"geo",science:"science",sciences:"science",sport:"sport",culture:"culture",langue:"langue",francais:"langue",logique:"logique",vraioufaux:"vraioufaux",tout:"tout",mixte:"tout",general:"tout"};
+    const selected=quizChoices.find(x=>x.key===aliases[key]);
+    if(!selected) return showQuizMenu(chat);
+    await startQuiz(chat,selected.cat,selected.title);
+  });
   const categories=[
     ["culture","culture","CULTURE GÉNÉRALE"],["math","math","MATHÉMATIQUES"],
     ["science","science","SCIENCES"],["histoire","histoire","HISTOIRE"],
     ["geo","geo","GÉOGRAPHIE"],["langue","langue","FRANÇAIS"],
     ["sport","sport","SPORT"],["logique","logique","LOGIQUE"],
-    ["vraioufaux","vraioufaux","VRAI OU FAUX"],["capitales","geo","CAPITALES & GÉOGRAPHIE"]
+    ["vraioufaux","vraioufaux","VRAI OU FAUX"],["capitales","geo","CAPITALES & GÉOGRAPHIE"],
+    ["animequiz","anime","ANIMÉS & MANGAS"],["sonsquiz","sons","MUSIQUE & SONS"],["viequiz","vie","VIE QUOTIDIENNE"]
   ];
   for(const [cmd,cat,title] of categories) register(cmd,"FUN & GAMES","Quiz : "+title,async({chat})=>startQuiz(chat,cat,title));
 
@@ -213,6 +275,14 @@ export function registerMheFunGames({register,sendText,settings,saveSettings,get
     const session=sessions.get(chat);
     if(!session) return false;
     if(Date.now()-session.startedAt>15*60_000) { sessions.delete(chat); await sendText(chat,"⌛ Cette partie a expiré. Relance avec .quiz."); return true; }
+    if(session.type==="quiz-menu") {
+      const selectedIndex=/^\d{1,2}$/.test(text)?Number(text)-1:-1;
+      const key=norm(text);
+      const selected=selectedIndex>=0?quizChoices[selectedIndex]:quizChoices.find(x=>norm(x.key)===key||norm(x.title)===key);
+      if(!selected) { await sendText(chat,"Choix non reconnu. Réponds avec un numéro de 1 à "+quizChoices.length+" ou relance .quiz."); return true; }
+      await startQuiz(chat,selected.cat,selected.title);
+      return true;
+    }
     if(session.type==="open") {
       const answer=norm(text);
       if(!session.item.a.some(x=>norm(x)===answer)) { await sendText(chat,"❌ Pas tout à fait. Essaie encore, ou utilise .quizstop."); return true; }
