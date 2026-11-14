@@ -701,7 +701,7 @@ register('botinfo', 'GÉNÉRAL', 'Afficher les informations du bot', async ({ ch
     `├✦ Commandes enregistrées : ${commands.size}`,
     `├✦ Uptime : ${formatUptime(Date.now() - STARTED_AT)}`,
     '╰━━━━━━━━━━━━━━⊷',
-  ].join('\\n'));
+  ].join('\n'));
 });
 register('chatid', 'GÉNÉRAL', 'Afficher l’identifiant du chat', async ({ chat }) => {
   await sendText(chat, `🆔 ID du chat : ${chat}`);
