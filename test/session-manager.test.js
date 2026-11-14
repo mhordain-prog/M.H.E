@@ -152,12 +152,8 @@ test('hydrates validated durable session records and rebuilds the private number
   assert.equal(sessions.get('restored-session-01').state, 'connected');
   assert.equal(sessions.getByNumber('243811111111').id, 'restored-session-01');
   assert.equal(Object.hasOwn(sessions.get('restored-session-01'), 'number'), false);
-  await assert.rejects(
-    sessions.create({ number: '243811111111' }).then((record) => {
-      assert.equal(record.id, 'restored-session-01');
-    }),
-    /./,
-  ).catch(() => {});
+  const duplicate = await sessions.create({ number: '243811111111' });
+  assert.equal(duplicate.id, 'restored-session-01');
 });
 
 test('rejects malformed, duplicate, or conflicting restored session records', () => {
