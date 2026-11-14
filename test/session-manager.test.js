@@ -151,6 +151,7 @@ test('hydrates validated durable session records and rebuilds the private number
   assert.equal(sessions.size, 1);
   assert.equal(sessions.get('restored-session-01').state, 'connected');
   assert.equal(sessions.getByNumber('243811111111').id, 'restored-session-01');
+  assert.equal(sessions.get('restored-session-01').numberMasked, '••••••••1111');
   assert.equal(Object.hasOwn(sessions.get('restored-session-01'), 'number'), false);
   const duplicate = await sessions.create({ number: '243811111111' });
   assert.equal(duplicate.id, 'restored-session-01');
