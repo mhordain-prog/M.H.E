@@ -31,7 +31,10 @@ function normalizeNumber(value) {
 function publicRecord(record) {
   if (!record) return null;
   const { number, ...safe } = record;
-  return { ...safe };
+  return {
+    ...safe,
+    numberMasked: number ? `${'•'.repeat(Math.max(0, number.length - 4))}${number.slice(-4)}` : null,
+  };
 }
 
 /**
