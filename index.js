@@ -66,6 +66,9 @@ let pairCooldownUntil = 0;
 let pairRequestInProgress = false;
 let pendingPairingNumber = '';
 const pairIpCooldowns = new Map();
+const multiPairIpCooldowns = new Map();
+const multiPairNumberLocks = new Set();
+let multiSessionService;
 const PAIR_COOLDOWN_MS = 45_000;
 const commands = new Map();
 registerControlCenter({
@@ -969,19 +972,59 @@ app.get('/health', (_req, res) => {
     commands: commands.size,
     mode,
     sessionPersistence: sessionStore.status,
+    multiSessions: {
+      enabled: Boolean(multiSessionService?.enabled),
+      active: multiSessionService?.runtime?.size || 0,
+      total: multiSessionService?.sessionManager?.size || 0,
+    },
   });
 });
 app.post('/api/pair', async (req, res) => {
   const now = Date.now();
   const ip = req.ip || 'unknown';
   const lastIpRequest = pairIpCooldowns.get(ip) || 0;
-  if (pairRequestInProgress || now < pairCooldownUntil || now - lastIpRequest < PAIR_COOLDOWN_MS) {
+  if (!authState?.creds?.registered &&
+      (pairRequestInProgress || now < pairCooldownUntil || now - lastIpRequest < PAIR_COOLDOWN_MS)) {
     return res.status(429).json({ error: 'Une demande est déjà en cours ou vient d’être effectuée. Attends 45 secondes avant de réessayer.' });
   }
   const number = String(req.body?.number || '').replace(/\D/g, '');
   if (number.length < 10 || number.length > 15) {
     return res.status(400).json({ error: 'Entre ton numéro WhatsApp au format international, chiffres uniquement, sans + ni espaces.' });
   }
+
+  // The first account remains the primary legacy connection. Once it is linked,
+  // additional phone numbers receive independent sockets and isolated auth stores.
+  if (authState?.creds?.registered) {
+    const primaryNumber = cleanNumber(primarySocket?.user?.id || primarySocket?.user?.phoneNumber || '');
+    if (primaryNumber && primaryNumber === number) {
+      return res.status(409).json({ error: 'Ce numéro est déjà connecté comme compte principal M.H.E.' });
+    }
+    if (!multiSessionService?.enabled) {
+      return res.status(503).json({ error: 'Les connexions supplémentaires nécessitent le stockage chiffré Supabase de M.H.E. Il n’est pas activé sur ce serveur.' });
+    }
+    const lastMultiRequest = multiPairIpCooldowns.get(ip) || 0;
+    if (now - lastMultiRequest < PAIR_COOLDOWN_MS || multiPairNumberLocks.has(number)) {
+      return res.status(429).json({ error: 'Attends 45 secondes avant une nouvelle demande de jumelage.' });
+    }
+    multiPairNumberLocks.add(number);
+    multiPairIpCooldowns.set(ip, now);
+    try {
+      const result = await multiSessionService.runtime.requestPairingCode(number);
+      const rawCode = result.code;
+      return res.json({
+        code: rawCode.match(/.{1,4}/g)?.join('-') || rawCode,
+        sessionId: result.session.id,
+        state: result.session.state,
+      });
+    } catch (error) {
+      multiPairIpCooldowns.delete(ip);
+      logger.warn({ err: error }, 'Additional WhatsApp pairing request failed');
+      return res.status(503).json({ error: 'Impossible de créer une session WhatsApp supplémentaire. Vérifie la connexion puis réessaie.' });
+    } finally {
+      multiPairNumberLocks.delete(number);
+    }
+  }
+
   if (!socket || !authState || authState.creds.registered) {
     return res.status(409).json({ error: 'Le service WhatsApp n’est pas disponible pour un nouvel appairage. Vérifie son état puis réessaie.' });
   }
@@ -1022,6 +1065,10 @@ app.get('/api/status', (_req, res) => {
     connected: whatsappConnection === 'open',
     registered: Boolean(authState?.creds?.registered),
     state: whatsappConnection,
+    multiSessions: {
+      enabled: Boolean(multiSessionService?.enabled),
+      sessions: multiSessionService?.sessionManager?.list() || [],
+    },
   });
 });
 const server = app.listen(PORT, '0.0.0.0', () => logger.info({ port: PORT }, 'M.H.E. web server started'));
