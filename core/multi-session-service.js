@@ -12,6 +12,7 @@ export function createMultiSessionService({
   registryDirectory = './.mhe-session-registry',
   sessionDirectory = './sessions',
   maxSessions = 50,
+  encryptionKey = process.env.MHE_SESSION_ENCRYPTION_KEY,
   logger = console,
   ...runtimeDependencies
 } = {}) {
@@ -22,6 +23,7 @@ export function createMultiSessionService({
     store: registryStore,
     directory: registryDirectory,
     maxSessions,
+    encryptionKey,
     logger,
   });
 
