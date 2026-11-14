@@ -7,7 +7,8 @@ import { registerMheEnhancements } from './core/mhe-enhancements.js';
 import { registerControlCenter } from './core/control-center.js';
 import { createWarningManager } from './core/warnings.js';
 import { createSupabaseSessionStore } from './core/session-store.js';
-import { bindSessionEvent, createContextualProxy, createSessionScopedMap } from './core/session-context.js';
+import { bindSessionEvent, createContextualProxy, createSessionScopedMap, getSessionContext, runWithSessionContext } from './core/session-context.js';
+import { createMultiSessionService } from './core/multi-session-service.js';
 import { registerReferrals } from './core/referrals.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -56,7 +57,10 @@ let authState;
 let saveCreds;
 let reconnectTimer;
 let mode = process.env.BOT_MODE === 'public' ? 'public' : 'private';
-let primarySettings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true };
+function defaultSettings() { return { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true }; }
+let primarySettings = defaultSettings();
+function getMode() { return getSessionContext()?.settings?.mode || mode; }
+function setMode(value) { const scoped = getSessionContext()?.settings; if (scoped) scoped.mode = value; else mode = value; }
 const settings = createContextualProxy({ getFallback: () => primarySettings, contextKey: 'settings', bindMethods: false });
 let pairCooldownUntil = 0;
 let pairRequestInProgress = false;
@@ -65,28 +69,38 @@ const pairIpCooldowns = new Map();
 const PAIR_COOLDOWN_MS = 45_000;
 const commands = new Map();
 registerControlCenter({
-  app, commands, getSocket: () => socket, getMode: () => mode,
+  app, commands, getSocket: () => socket, getMode,
   getPrefix: () => PREFIX, getOwnerName: () => DISPLAY_OWNER,
   getStartedAt: () => STARTED_AT,
 });
 const recentGroupMessages = createSessionScopedMap();
-let activitySinceSave = 0;
+const activitySaveCounts = createSessionScopedMap();
 
 async function loadSettings() {
+  const context = getSessionContext();
+  const target = context?.settings || primarySettings;
+  const file = context?.settingsFile || SETTINGS_FILE;
   try {
-    const parsed = JSON.parse(await fs.readFile(SETTINGS_FILE, 'utf8'));
-    primarySettings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true, ...parsed, groups: parsed.groups || {} };
-    if (parsed.mode === 'public' || parsed.mode === 'private') mode = parsed.mode;
-    if (typeof parsed.prefix === 'string' && parsed.prefix.length > 0 && parsed.prefix.length <= 3) PREFIX = parsed.prefix;
-    if (typeof parsed.botname === 'string' && parsed.botname.trim()) BOT_NAME = parsed.botname;
-    if (typeof parsed.ownername === 'string' && parsed.ownername.trim()) DISPLAY_OWNER = parsed.ownername;
+    const parsed = JSON.parse(await fs.readFile(file, 'utf8'));
+    Object.assign(target, defaultSettings(), parsed, { groups: parsed.groups || {} });
+    if (parsed.mode === 'public' || parsed.mode === 'private') target.mode = parsed.mode;
+    if (!context) {
+      if (parsed.mode === 'public' || parsed.mode === 'private') mode = parsed.mode;
+      if (typeof parsed.prefix === 'string' && parsed.prefix.length > 0 && parsed.prefix.length <= 3) PREFIX = parsed.prefix;
+      if (typeof parsed.botname === 'string' && parsed.botname.trim()) BOT_NAME = parsed.botname;
+      if (typeof parsed.ownername === 'string' && parsed.ownername.trim()) DISPLAY_OWNER = parsed.ownername;
+    }
   } catch (error) {
     if (error.code !== 'ENOENT') logger.warn({ err: error }, 'Settings could not be read; using defaults');
+    Object.assign(target, defaultSettings());
+    if (context) target.mode = mode;
   }
 }
 async function saveSettings() {
-  await fs.mkdir(path.dirname(SETTINGS_FILE), { recursive: true });
-  await fs.writeFile(SETTINGS_FILE, JSON.stringify({ ...settings, mode }, null, 2));
+  const context = getSessionContext();
+  const file = context?.settingsFile || SETTINGS_FILE;
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, JSON.stringify({ ...settings, mode: getMode() }, null, 2));
 }
 function register(name, category, description, handler, ownerOnly = false) {
   commands.set(name, { name, category, description, handler, ownerOnly });
@@ -180,7 +194,7 @@ async function executeCommand(message, commandName, args, isOwner) {
   if (!command) return;
   const chat = message.key.remoteJid;
   const actor = senderJid(message);
-  if (mode === 'private' && !isOwner && command.category !== 'FUN & GAMES') return;
+  if (getMode() === 'private' && !isOwner && command.category !== 'FUN & GAMES') return;
   if (command.ownerOnly && !isOwner) {
     await sendText(chat, '⛔ Cette commande est réservée au propriétaire du bot.');
     return;
@@ -218,7 +232,7 @@ register('menu', 'GÉNÉRAL', 'Afficher le menu GOLD et les commandes réellemen
     '⏱️ UPTIME : ' + formatUptime(Date.now() - STARTED_AT),
     '📚 COMMANDS : ' + commands.size,
     '🔖 PREFIX : ' + PREFIX,
-    '🔒 MODE : ' + mode.toUpperCase(),
+    '🔒 MODE : ' + getMode().toUpperCase(),
     '╚════════════════════════════╝',
     'Select a category below to browse commands.'
   ];
@@ -255,7 +269,7 @@ register('ping', 'GÉNÉRAL', 'Vérifier si le bot répond', async ({ chat }) =>
   await sendText(chat, '🏓 M.H.E. répond. Le processus WhatsApp est actif.');
 });
 register('alive', 'GÉNÉRAL', 'État du bot', async ({ chat }) => {
-  await sendText(chat, `✅ ${BOT_NAME} est démarré. Mode : ${mode}. Commandes actives : ${commands.size}.`);
+  await sendText(chat, `✅ ${BOT_NAME} est démarré. Mode : ${getMode()}. Commandes actives : ${commands.size}.`);
 });
 register('owner', 'GÉNÉRAL', 'Afficher le propriétaire connecté', async ({ chat }) => {
   const owner = cleanNumber(socket?.user?.id || '');
@@ -264,12 +278,12 @@ register('owner', 'GÉNÉRAL', 'Afficher le propriétaire connecté', async ({ c
 register('mode', 'PROPRIÉTAIRE', 'Utilisation : .mode private ou .mode public', async ({ chat, args }) => {
   const next = (args[0] || '').toLowerCase();
   if (!['private', 'public'].includes(next)) {
-    await sendText(chat, `Mode actuel : ${mode}. Utilise ${PREFIX}mode private ou ${PREFIX}mode public.`);
+    await sendText(chat, `Mode actuel : ${getMode()}. Utilise ${PREFIX}mode private ou ${PREFIX}mode public.`);
     return;
   }
-  mode = next;
+  setMode(next);
   await saveSettings();
-  await sendText(chat, `✅ Mode modifié : ${mode}.`);
+  await sendText(chat, `✅ Mode modifié : ${getMode()}.`);
 }, true);
 register('tagall', 'GROUPES', 'Mentionner les membres du groupe', async ({ chat, actor, message, args }) => {
   requireGroup(chat);
@@ -670,7 +684,7 @@ for (const alias of ['antilink','antispam','antidelete','antitag','antistatusmen
 register('settings', 'PROPRIÉTAIRE', 'Afficher les réglages enregistrés', async ({ chat, isOwner }) => {
   requireOwner(isOwner);
   const safe = { ...settings, sudo: settings.sudo || [], banned: settings.banned || [] };
-  await sendText(chat, `╭┈───〔 M.H.E OWNER GOLD 〕┈───⊷\nMode : ${mode}\nPréfixe : ${PREFIX}\nBot : ${BOT_NAME}\nPropriétaire affiché : ${DISPLAY_OWNER}\nSUDO : ${safe.sudo.length}\nBannis : ${safe.banned.length}\nBienvenue : ${safe.welcome ? 'ON' : 'OFF'}\nAu revoir : ${safe.goodbye ? 'ON' : 'OFF'}\nAntilink : ${safe.antilink ? 'ON' : 'OFF'}\n╰───────────────────⊷`);
+  await sendText(chat, `╭┈───〔 M.H.E OWNER GOLD 〕┈───⊷\nMode : ${getMode()}\nPréfixe : ${PREFIX}\nBot : ${BOT_NAME}\nPropriétaire affiché : ${DISPLAY_OWNER}\nSUDO : ${safe.sudo.length}\nBannis : ${safe.banned.length}\nBienvenue : ${safe.welcome ? 'ON' : 'OFF'}\nAu revoir : ${safe.goodbye ? 'ON' : 'OFF'}\nAntilink : ${safe.antilink ? 'ON' : 'OFF'}\n╰───────────────────⊷`);
 }, true);
 register('mhe-owner', 'PROPRIÉTAIRE', 'Afficher l’aide OWNER GOLD', async ({ chat, isOwner }) => {
   requireOwner(isOwner);
@@ -700,7 +714,7 @@ register('botinfo', 'GÉNÉRAL', 'Afficher les informations du bot', async ({ ch
     `├✦ Propriétaire : ${DISPLAY_OWNER}`,
     `├✦ Version : ${BOT_VERSION}`,
     `├✦ Préfixe : ${PREFIX}`,
-    `├✦ Mode : ${mode.toUpperCase()}`,
+    `├✦ Mode : ${getMode().toUpperCase()}`,
     `├✦ Commandes enregistrées : ${commands.size}`,
     `├✦ Uptime : ${formatUptime(Date.now() - STARTED_AT)}`,
     '╰━━━━━━━━━━━━━━⊷',
@@ -1179,7 +1193,7 @@ async function startWhatsApp() {
         }
       }
       if (await handleMheFunGamesIncoming.handleIncoming(message)) continue;
-      if (await handleMheGoldIncoming(message, { mode })) continue;
+      if (await handleMheGoldIncoming(message, { mode: getMode() })) continue;
       if (!text.startsWith(PREFIX)) continue;
       const [name, ...args] = text.slice(PREFIX.length).trim().split(/\s+/);
       if (!name) continue;
@@ -1244,7 +1258,7 @@ register('resetwarn', 'GROUPES', 'Réinitialiser les avertissements d’un membr
 
 registerMheEnhancements({
   register, commands, sendText, getSocket: () => socket, settings, saveSettings,
-  getPrefix: () => PREFIX, getMode: () => mode, getBotName: () => BOT_NAME,
+  getPrefix: () => PREFIX, getMode, getBotName: () => BOT_NAME,
   getOwnerName: () => DISPLAY_OWNER, getVersion: () => BOT_VERSION,
   getStartedAt: () => STARTED_AT, getGroupContext: groupContext, requireGroup,
 });
