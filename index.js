@@ -57,6 +57,7 @@ let mode = process.env.BOT_MODE === 'public' ? 'public' : 'private';
 let settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true };
 let pairCooldownUntil = 0;
 let pairRequestInProgress = false;
+let pendingPairingNumber = '';
 const pairIpCooldowns = new Map();
 const PAIR_COOLDOWN_MS = 45_000;
 const commands = new Map();
@@ -986,12 +987,14 @@ app.post('/api/pair', async (req, res) => {
     }
 
     const code = await pairingSocket.requestPairingCode(number);
+    pendingPairingNumber = number;
     logger.warn({ event: 'pairing_code_issued' }, 'WhatsApp pairing code issued');
     return res.json({ code: String(code).match(/.{1,4}/g)?.join('-') || String(code) });
   } catch (error) {
     logger.warn({ err: error }, 'Pairing request failed');
     pairCooldownUntil = 0;
     pairIpCooldowns.delete(ip);
+    if (pendingPairingNumber === number) pendingPairingNumber = '';
     return res.status(503).json({ error: 'Le serveur WhatsApp n’a pas terminé sa connexion. Attends quelques secondes puis réessaie.' });
   } finally {
     pairRequestInProgress = false;
@@ -1044,7 +1047,32 @@ async function startWhatsApp() {
   socket.ev.on('creds.update', saveCreds);
   socket.ev.on('connection.update', ({ connection, lastDisconnect }) => {
     if (connection) whatsappConnection = connection;
-    if (connection === 'open') logger.info('WhatsApp connected');
+    if (connection === 'open') {
+      logger.info('WhatsApp connected');
+      const expectedNumber = pendingPairingNumber;
+      if (expectedNumber) {
+        pendingPairingNumber = '';
+        const connectedSocket = socket;
+        const connectedNumber = cleanNumber(connectedSocket?.user?.id || connectedSocket?.user?.phoneNumber || '');
+        if (connectedNumber && connectedNumber === expectedNumber) {
+          connectedSocket.sendMessage(connectedSocket.user?.id || `${connectedNumber}@s.whatsapp.net`, {
+            text: [
+              '👑 M.H.E-MD GOLD',
+              '',
+              '✓ CONNEXION RÉUSSIE',
+              'Votre compte WhatsApp est maintenant connecté.',
+              '',
+              'M.H.E-MD GOLD est fonctionnel.',
+              'Envoie .menu pour découvrir les commandes.',
+              '',
+              'GOLDEN BOT SYSTEM • HORDAIN MADILA',
+            ].join('\\n'),
+          }).catch((error) => logger.warn({ err: error }, 'Pairing welcome message could not be delivered'));
+        } else {
+          logger.warn({ event: 'pairing_number_mismatch' }, 'Connected WhatsApp account did not match the number used for pairing');
+        }
+      }
+    }
     if (connection === 'close') {
       whatsappConnection = 'close';
       socket = undefined;
