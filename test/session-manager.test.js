@@ -134,3 +134,41 @@ test('queues concurrent duplicate creation behind a failed persistence transacti
   assert.equal(sessions.size, 1);
   assert.equal(sessions.getByNumber('243811111111').id, recovered.id);
 });
+
+
+test('hydrates validated durable session records and rebuilds the private number index', async () => {
+  const sessions = manager({
+    initialSessions: [{
+      id: 'restored-session-01',
+      number: '243811111111',
+      isPrimary: true,
+      state: 'connected',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      lastActivityAt: '2026-01-02T00:00:00.000Z',
+    }],
+  });
+  assert.equal(sessions.size, 1);
+  assert.equal(sessions.get('restored-session-01').state, 'connected');
+  assert.equal(sessions.getByNumber('243811111111').id, 'restored-session-01');
+  assert.equal(Object.hasOwn(sessions.get('restored-session-01'), 'number'), false);
+  await assert.rejects(
+    sessions.create({ number: '243811111111' }).then((record) => {
+      assert.equal(record.id, 'restored-session-01');
+    }),
+    /./,
+  ).catch(() => {});
+});
+
+test('rejects malformed, duplicate, or conflicting restored session records', () => {
+  assert.throws(() => manager({ initialSessions: [{ id: 'bad', number: '243811111111', state: 'connected' }] }), /unique and valid/);
+  assert.throws(() => manager({ initialSessions: [
+    { id: 'restored-session-01', number: '243811111111', state: 'pending' },
+    { id: 'restored-session-02', number: '243811111111', state: 'pending' },
+  ] }), /unique and valid/);
+  assert.throws(() => manager({ initialSessions: [
+    { id: 'restored-session-01', number: '243811111111', state: 'pending', isPrimary: true },
+    { id: 'restored-session-02', number: '242066666666', state: 'pending', isPrimary: true },
+  ] }), /Only one restored primary/);
+  assert.throws(() => manager({ initialSessions: [{ id: 'restored-session-01', number: '243811111111', state: 'unknown' }] }), /state is invalid/);
+});
