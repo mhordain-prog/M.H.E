@@ -91,12 +91,12 @@ export function createWhatsAppSessionRuntime({
     const task = (async () => {
       if (record.state === 'logged_out') await sessionManager.setState(id, 'pending');
       else if (record.state === 'disconnected' || record.state === 'error') await sessionManager.setState(id, 'reconnecting');
-      const current = sessionManager.get(id);
-      const runtime = await createSocket(current);
-      if (!runtime.numberRegistered && current.state !== 'pairing') {
+      let current = sessionManager.get(id);
+      if (current.state === 'pending') {
         await sessionManager.setState(id, 'pairing');
+        current = sessionManager.get(id);
       }
-      return runtime;
+      return createSocket(current);
     })().finally(() => starts.delete(id));
     starts.set(id, task);
     return task;
@@ -115,10 +115,18 @@ export function createWhatsAppSessionRuntime({
     if (typeof runtime.socket.waitForSocketOpen !== 'function') {
       throw new Error('Le transport WhatsApp ne permet pas de confirmer son ouverture.');
     }
-    await Promise.race([
-      runtime.socket.waitForSocketOpen(),
-      new Promise((_, reject) => setTimeoutFn(() => reject(new Error('Délai dépassé pendant la connexion WhatsApp.')), openTimeoutMs)),
-    ]);
+    let timeout;
+    try {
+      await Promise.race([
+        runtime.socket.waitForSocketOpen(),
+        new Promise((_, reject) => {
+          timeout = setTimeoutFn(() => reject(new Error('Délai dépassé pendant la connexion WhatsApp.')), openTimeoutMs);
+          timeout?.unref?.();
+        }),
+      ]);
+    } finally {
+      if (timeout) clearTimeoutFn(timeout);
+    }
     const code = await runtime.socket.requestPairingCode(String(number).replace(/\D/g, ''));
     return { session: sessionManager.get(runtime.id), code: String(code) };
   }
