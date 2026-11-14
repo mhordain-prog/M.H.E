@@ -57,7 +57,7 @@ let authState;
 let saveCreds;
 let reconnectTimer;
 let mode = process.env.BOT_MODE === 'public' ? 'public' : 'private';
-function defaultSettings() { return { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true }; }
+function defaultSettings() { return { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: false, autotyping: false, autoreact: true }; }
 let primarySettings = defaultSettings();
 function getMode() { return getSessionContext()?.settings?.mode || mode; }
 function setMode(value) { const scoped = getSessionContext()?.settings; if (scoped) scoped.mode = value; else mode = value; }
@@ -85,7 +85,7 @@ async function loadSettings() {
   const file = context?.settingsFile || SETTINGS_FILE;
   try {
     const parsed = JSON.parse(await fs.readFile(file, 'utf8'));
-    Object.assign(target, defaultSettings(), parsed, { groups: parsed.groups || {} });
+    Object.assign(target, defaultSettings(), parsed, { groups: parsed.groups || {}, autoread: false, autotyping: false });
     if (parsed.mode === 'public' || parsed.mode === 'private') target.mode = parsed.mode;
     if (!context) {
       if (parsed.mode === 'public' || parsed.mode === 'private') mode = parsed.mode;
