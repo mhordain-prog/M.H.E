@@ -1,12 +1,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createSessionScopedMap, getSessionContext } from './session-context.js';
 
 const WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const LIMIT = 3;
 const SPAM_WINDOW_MS = 8_000;
 const SPAM_THRESHOLD = 6;
 const MAX_TRACKED_SENDERS = 10_000;
-const messageWindows = new Map();
+const messageWindows = createSessionScopedMap();
 let lastSpamSweep = 0;
 
 function normalizeJid(jid = '') {
@@ -19,7 +20,9 @@ function numbersFrom(values) {
 
 function warningKey(groupJid, actorJid) {
   const legacyCompatibleId = numbersFrom([actorJid])[0] || normalizeJid(actorJid);
-  return `${groupJid}|${legacyCompatibleId}`;
+  const sessionId = getSessionContext()?.id || 'primary';
+  const scope = sessionId === 'primary' ? '' : `${sessionId}|`;
+  return `${scope}${groupJid}|${legacyCompatibleId}`;
 }
 
 export function createWarningManager({ file = './data/warnings.json', sendText, getSocket, isOwnerNumber }) {
