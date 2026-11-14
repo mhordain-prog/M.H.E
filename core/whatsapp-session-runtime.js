@@ -184,14 +184,16 @@ export function createWhatsAppSessionRuntime({
       runtime.closed = true;
       runtimes.delete(id);
       try { runtime.socket.end?.(undefined); } catch {}
-      try { await runtime.store.clear?.(); }
-      catch (error) {
-        logger.error?.({ err: error, sessionId: id }, 'Encrypted WhatsApp session objects could not be deleted');
-        await fs.rm(runtime.directory, { recursive: true, force: true }).catch(() => {});
-        throw error;
-      }
-      await fs.rm(runtime.directory, { recursive: true, force: true });
     }
+    const directory = runtime?.directory || directoryFor(id);
+    const store = runtime?.store || createStore({ prefix: `mhe/sessions/${id}/` });
+    try { await store.clear?.(); }
+    catch (error) {
+      logger.error?.({ err: error, sessionId: id }, 'Encrypted WhatsApp session objects could not be deleted');
+      await fs.rm(directory, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    }
+    await fs.rm(directory, { recursive: true, force: true });
     return true;
   }
 
