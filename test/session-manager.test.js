@@ -107,3 +107,30 @@ test('refuses to remove a connected session unless explicitly forced', async () 
   assert.equal(await sessions.remove(session.id, { force: true }), true);
   assert.equal(sessions.size, 0);
 });
+
+test('queues concurrent duplicate creation behind a failed persistence transaction', async () => {
+  let calls = 0;
+  let releaseFirst;
+  const firstWrite = new Promise((resolve) => { releaseFirst = resolve; });
+  const sessions = manager({
+    persist: async () => {
+      calls += 1;
+      if (calls === 1) {
+        await firstWrite;
+        throw new Error('first write failed');
+      }
+    },
+  });
+
+  const first = sessions.create({ number: '243811111111' });
+  const duplicate = sessions.create({ number: '243811111111' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls, 1);
+  releaseFirst();
+
+  await assert.rejects(first, /first write failed/);
+  const recovered = await duplicate;
+  assert.equal(calls, 2);
+  assert.equal(sessions.size, 1);
+  assert.equal(sessions.getByNumber('243811111111').id, recovered.id);
+});
