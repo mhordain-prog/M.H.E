@@ -999,7 +999,7 @@ app.post('/api/pair', async (req, res) => {
   // The first account remains the primary legacy connection. Once it is linked,
   // additional phone numbers receive independent sockets and isolated auth stores.
   if (authState?.creds?.registered) {
-    const primaryNumber = cleanNumber(primarySocket?.user?.id || primarySocket?.user?.phoneNumber || '');
+    const primaryNumber = cleanNumber(primarySocket?.user?.id || primarySocket?.user?.phoneNumber || authState?.creds?.me?.id || '');
     if (primaryNumber && primaryNumber === number) {
       return res.status(409).json({ error: 'Ce numéro est déjà connecté comme compte principal M.H.E.' });
     }
