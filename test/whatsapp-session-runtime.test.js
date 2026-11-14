@@ -71,6 +71,8 @@ test('issues pairing codes for the requested number and keeps sessions separate'
   assert.equal(second.code, 'CODE-242066666666');
   assert.notEqual(first.session.id, second.session.id);
   assert.equal(sessionManager.size, 2);
+  assert.equal(runtime.getRuntime(first.session.id).expectedPairingNumber, '243811111111');
+  assert.equal(runtime.getRuntime(second.session.id).expectedPairingNumber, '242066666666');
 });
 
 test('marks the matching runtime connected when its socket opens', async (t) => {
