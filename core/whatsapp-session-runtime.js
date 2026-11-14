@@ -127,7 +127,9 @@ export function createWhatsAppSessionRuntime({
     } finally {
       if (timeout) clearTimeoutFn(timeout);
     }
-    const code = await runtime.socket.requestPairingCode(String(number).replace(/\D/g, ''));
+    const normalizedNumber = String(number).replace(/\D/g, '');
+    runtime.expectedPairingNumber = normalizedNumber;
+    const code = await runtime.socket.requestPairingCode(normalizedNumber);
     return { session: sessionManager.get(runtime.id), code: String(code) };
   }
 
