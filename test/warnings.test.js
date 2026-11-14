@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createWarningManager } from '../core/warnings.js';
+import { runWithSessionContext } from '../core/session-context.js';
 
 async function setup(t, options = {}) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mhe-warnings-'));
@@ -87,4 +88,17 @@ test('persistence errors are surfaced instead of claiming a saved warning', asyn
     getSocket: () => ({ groupMetadata: async () => ({ participants: [] }) }),
   });
   await assert.rejects(manager.warn({ groupJid, actorJid: memberJid, reason: 'spam' }));
+});
+
+test('warning records are isolated between WhatsApp sessions', async (t) => {
+  const { manager } = await setup(t);
+  await runWithSessionContext({ id: 'account-a', socket: { groupMetadata: async () => ({ participants: [] }) } }, () =>
+    manager.warn({ groupJid, actorJid: memberJid, reason: 'test A' }));
+  const accountA = await runWithSessionContext({ id: 'account-a' }, () =>
+    manager.getWarnings(groupJid, memberJid));
+  const accountB = await runWithSessionContext({ id: 'account-b' }, () =>
+    manager.getWarnings(groupJid, memberJid));
+  assert.equal(accountA.length, 1);
+  assert.equal(accountA[0].reason, 'test A');
+  assert.equal(accountB.length, 0);
 });
