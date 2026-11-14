@@ -47,33 +47,57 @@ export function createWhatsAppSessionRuntime({
       printQRInTerminal: false,
       markOnlineOnConnect: false,
     });
-    const runtime = { id: record.id, numberRegistered: Boolean(auth.state?.creds?.registered), directory, store, auth, socket, context, reconnectTimer: null, closed: false };
+    const runtime = {
+      id: record.id,
+      numberRegistered: Boolean(auth.state?.creds?.registered),
+      directory,
+      store,
+      auth,
+      socket,
+      context,
+      reconnectTimer: null,
+      closed: false,
+      expectedPairingNumber: '',
+    };
     runtimes.set(record.id, runtime);
 
     bindSessionEvent(socket, 'creds.update', async (...args) => {
+      if (runtime.closed) return;
       await auth.saveCreds(...args);
       try { await store.sync(directory); }
       catch (error) { logger.error?.({ err: error, sessionId: record.id }, 'WhatsApp session backup failed'); }
     }, context);
 
     bindSessionEvent(socket, 'connection.update', async ({ connection, lastDisconnect }) => {
+      if (runtime.closed) return;
       if (connection === 'open') {
+        if (runtime.reconnectTimer) clearTimeoutFn(runtime.reconnectTimer);
+        runtime.reconnectTimer = null;
         await sessionManager.setState(record.id, 'connected', { activity: true });
         runtime.numberRegistered = true;
         logger.info?.({ sessionId: record.id, restored: restored.restored || 0 }, 'WhatsApp session connected');
       }
-      if (connection === 'close' && !runtime.closed) {
+      if (connection === 'close') {
+        if (runtime.reconnectTimer) return;
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         if (statusCode === disconnectReason.loggedOut) {
-          await sessionManager.setState(record.id, 'logged_out').catch((error) => logger.warn?.({ err: error, sessionId: record.id }, 'Could not mark session logged out'));
-          runtimes.delete(record.id);
           runtime.closed = true;
+          runtimes.delete(record.id);
+          await sessionManager.setState(record.id, 'logged_out').catch((error) => logger.warn?.({ err: error, sessionId: record.id }, 'Could not mark session logged out'));
           return;
         }
         await sessionManager.setState(record.id, 'reconnecting').catch(() => {});
         runtime.reconnectTimer = setTimeoutFn(async () => {
+          if (runtimes.get(record.id) !== runtime) return;
+          runtime.closed = true;
           runtimes.delete(record.id);
-          await startExisting(record.id).catch((error) => logger.error?.({ err: error, sessionId: record.id }, 'WhatsApp session reconnect failed'));
+          try { socket.end?.(lastDisconnect?.error); } catch {}
+          try {
+            await startExisting(record.id);
+          } catch (error) {
+            await sessionManager.setState(record.id, 'error', { errorCode: error?.code || 'reconnect_failed' }).catch(() => {});
+            logger.error?.({ err: error, sessionId: record.id }, 'WhatsApp session reconnect failed');
+          }
         }, 3000);
         runtime.reconnectTimer?.unref?.();
       }
@@ -108,43 +132,67 @@ export function createWhatsAppSessionRuntime({
   }
 
   async function requestPairingCode(number) {
-    const runtime = await start({ number });
-    if (runtime.numberRegistered || runtime.auth.state?.creds?.registered) {
-      throw new Error('Ce numéro possède déjà une session WhatsApp enregistrée.');
-    }
-    if (typeof runtime.socket.waitForSocketOpen !== 'function') {
-      throw new Error('Le transport WhatsApp ne permet pas de confirmer son ouverture.');
-    }
-    let timeout;
-    try {
-      await Promise.race([
-        runtime.socket.waitForSocketOpen(),
-        new Promise((_, reject) => {
-          timeout = setTimeoutFn(() => reject(new Error('Délai dépassé pendant la connexion WhatsApp.')), openTimeoutMs);
-          timeout?.unref?.();
-        }),
-      ]);
-    } finally {
-      if (timeout) clearTimeoutFn(timeout);
-    }
     const normalizedNumber = String(number).replace(/\D/g, '');
-    runtime.expectedPairingNumber = normalizedNumber;
-    const code = await runtime.socket.requestPairingCode(normalizedNumber);
-    return { session: sessionManager.get(runtime.id), code: String(code) };
+    const previous = sessionManager.getByNumber(normalizedNumber);
+    let runtime;
+    try {
+      runtime = await start({ number: normalizedNumber });
+      if (runtime.numberRegistered || runtime.auth.state?.creds?.registered) {
+        throw new Error('Ce numéro possède déjà une session WhatsApp enregistrée.');
+      }
+      if (typeof runtime.socket.waitForSocketOpen !== 'function') {
+        throw new Error('Le transport WhatsApp ne permet pas de confirmer son ouverture.');
+      }
+      let timeout;
+      try {
+        await Promise.race([
+          runtime.socket.waitForSocketOpen(),
+          new Promise((_, reject) => {
+            timeout = setTimeoutFn(() => reject(new Error('Délai dépassé pendant la connexion WhatsApp.')), openTimeoutMs);
+            timeout?.unref?.();
+          }),
+        ]);
+      } finally {
+        if (timeout) clearTimeoutFn(timeout);
+      }
+      runtime.expectedPairingNumber = normalizedNumber;
+      const code = await runtime.socket.requestPairingCode(normalizedNumber);
+      return { session: sessionManager.get(runtime.id), code: String(code) };
+    } catch (error) {
+      if (!previous) {
+        const created = sessionManager.getByNumber(normalizedNumber);
+        if (created) {
+          try { await stop(created.id, { force: true }); }
+          catch (cleanupError) {
+            logger.error?.({ err: cleanupError, sessionId: created.id }, 'Failed pairing attempt could not be fully cleaned up');
+          }
+        }
+      }
+      throw error;
+    }
   }
 
   async function stop(id, { force = false } = {}) {
     const runtime = runtimes.get(id);
-    if (runtime?.reconnectTimer) clearTimeoutFn(runtime.reconnectTimer);
     if (runtime && sessionManager.get(id)?.state === 'connected' && !force) {
       throw new Error('Déconnecte cette session avant de la supprimer.');
     }
+    const removed = await sessionManager.remove(id, { force });
+    if (!removed) return false;
+    if (runtime?.reconnectTimer) clearTimeoutFn(runtime.reconnectTimer);
     if (runtime) {
       runtime.closed = true;
       runtimes.delete(id);
       try { runtime.socket.end?.(undefined); } catch {}
+      try { await runtime.store.clear?.(); }
+      catch (error) {
+        logger.error?.({ err: error, sessionId: id }, 'Encrypted WhatsApp session objects could not be deleted');
+        await fs.rm(runtime.directory, { recursive: true, force: true }).catch(() => {});
+        throw error;
+      }
+      await fs.rm(runtime.directory, { recursive: true, force: true });
     }
-    return sessionManager.remove(id, { force });
+    return true;
   }
 
   return Object.freeze({
