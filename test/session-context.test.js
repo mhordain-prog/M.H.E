@@ -11,8 +11,8 @@ import {
 test('contextual proxies resolve independent sockets across concurrent async work', async () => {
   const primary = { name: 'primary', async getName() { await Promise.resolve(); return this.name; } };
   const proxy = createContextualProxy({ getFallback: () => primary, contextKey: 'socket' });
-  const first = { name: 'first' };
-  const second = { name: 'second' };
+  const first = { name: 'first', getName: primary.getName };
+  const second = { name: 'second', getName: primary.getName };
 
   const [a, b, fallback] = await Promise.all([
     runWithSessionContext({ socket: first }, async () => {
