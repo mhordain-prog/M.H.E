@@ -36,6 +36,12 @@
     .foot{margin:22px 0 0;text-align:center;color:#777064;font-size:11px}
     .status-pill{display:inline-flex;align-items:center;gap:7px;margin-top:20px;padding:6px 10px;border:1px solid #3d3320;border-radius:99px;color:var(--muted);font-size:11px}
     .dot{width:7px;height:7px;border-radius:50%;background:#c79e48}
+    .sessions{display:none;margin:18px 0 0;padding:14px;border:1px solid #302817;border-radius:13px;background:#0b0a08}
+    .sessions h2{margin:0 0 10px;color:var(--gold2);font-size:13px;letter-spacing:.08em}
+    .session-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid #272116;font-size:12px}
+    .session-row:first-of-type{border-top:0}
+    .session-number{color:var(--text);font-weight:700}
+    .session-state{color:var(--muted);text-align:right}
     @media(max-width:420px){body{padding:14px}h1{font-size:21px}#code{font-size:26px}}
   </style>
 </head>
@@ -60,6 +66,10 @@
     <button id="copy" type="button">COPIER LE CODE</button>
   </section>
   <p id="status" role="status" aria-live="polite"></p>
+  <section id="sessions" class="sessions" aria-live="polite">
+    <h2>SESSIONS WHATSAPP</h2>
+    <div id="session-list"></div>
+  </section>
   <section class="steps">
     <strong>Comment connecter M.H.E ?</strong>
     <ol>
@@ -80,15 +90,42 @@ const result=document.querySelector('#result');
 const codeEl=document.querySelector('#code');
 const statusEl=document.querySelector('#status');
 const serverState=document.querySelector('#server-state');
+const sessionsSection=document.querySelector('#sessions');
+const sessionList=document.querySelector('#session-list');
 let statusPoll;
+function renderSessions(data){
+  const sessions=data.multiSessions?.sessions||[];
+  sessionList.replaceChildren();
+  sessionsSection.style.display=sessions.length?'block':'none';
+  for(const session of sessions){
+    const row=document.createElement('div');
+    row.className='session-row';
+    const number=document.createElement('span');
+    number.className='session-number';
+    number.textContent=session.numberMasked||'Compte WhatsApp';
+    const state=document.createElement('span');
+    state.className='session-state';
+    const labels={pending:'En attente',pairing:'Jumelage en cours',connected:'Connecté',reconnecting:'Reconnexion',disconnected:'Déconnecté',logged_out:'Déconnecté du compte',error:'Erreur'};
+    state.textContent=labels[session.state]||session.state||'État inconnu';
+    row.append(number,state);
+    sessionList.append(row);
+  }
+}
 async function refreshServerState(){
   try{
-    const response=await fetch('/health',{cache:'no-store'});
-    const data=await response.json();
-    serverState.textContent=data.whatsapp==='connected'?'WhatsApp déjà connecté':data.ok?'Serveur M.H.E en ligne · WhatsApp en attente':'Serveur indisponible';
+    const [health,status]=await Promise.all([
+      fetch('/health',{cache:'no-store'}).then(r=>r.json()),
+      fetch('/api/status',{cache:'no-store'}).then(r=>r.json())
+    ]);
+    renderSessions(status);
+    const count=status.multiSessions?.sessions?.length||0;
+    serverState.textContent=status.connected
+      ? 'Compte principal connecté · '+count+' session(s) supplémentaire(s)'
+      :health.ok?'Serveur M.H.E en ligne · WhatsApp en attente':'Serveur indisponible';
   }catch{serverState.textContent='Serveur non joignable';}
 }
 refreshServerState();
+setInterval(refreshServerState,10000);
 document.querySelector('#copy').addEventListener('click',async()=>{
   const code=codeEl.textContent.replace(/-/g,'');
   try{await navigator.clipboard.writeText(code);statusEl.textContent='Code copié. Saisis-le uniquement dans WhatsApp.'}
@@ -104,10 +141,12 @@ form.addEventListener('submit',async(event)=>{
   result.style.display='none';
   statusEl.textContent='Connexion au serveur WhatsApp…';
   generate.disabled=true;
+  let targetSessionId='';
   try{
     const response=await fetch('/api/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({number:numberInput.value.trim()})});
     const data=await response.json();
     if(!response.ok)throw new Error(data.error||'Le serveur n’a pas pu générer le code.');
+    targetSessionId=data.sessionId||'';
     codeEl.textContent=data.code;
     result.style.display='block';
     statusEl.textContent='Code généré. Saisis-le maintenant dans WhatsApp.';
@@ -116,10 +155,15 @@ form.addEventListener('submit',async(event)=>{
       checks++;
       try{
         const state=await fetch('/api/status',{cache:'no-store'}).then(r=>r.json());
-        if(state.connected){
+        renderSessions(state);
+        const session=targetSessionId
+          ?(state.multiSessions?.sessions||[]).find(item=>item.id===targetSessionId)
+          :null;
+        const connected=targetSessionId?session?.state==='connected':state.connected;
+        if(connected){
           clearInterval(statusPoll);
           statusEl.textContent='Connexion WhatsApp confirmée. M.H.E est connecté.';
-          serverState.textContent='WhatsApp connecté';
+          refreshServerState();
         }else if(checks>=30){
           clearInterval(statusPoll);
           statusEl.textContent='La connexion n’est pas encore confirmée. Si WhatsApp a refusé le code, attends puis réessaie.';
