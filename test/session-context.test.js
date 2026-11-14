@@ -4,6 +4,7 @@ import { EventEmitter } from 'node:events';
 import {
   bindSessionEvent,
   createContextualProxy,
+  createSessionScopedMap,
   getSessionContext,
   runWithSessionContext,
 } from '../core/session-context.js';
@@ -58,4 +59,13 @@ test('rejects invalid context and event registrations', () => {
   assert.throws(() => runWithSessionContext(null, () => {}), /context object/);
   assert.throws(() => runWithSessionContext({}, null), /callback/);
   assert.throws(() => bindSessionEvent({}, 'message', () => {}), /event emitter/);
+});
+
+test('session-scoped maps keep identical chat keys isolated', () => {
+  const states = createSessionScopedMap();
+  runWithSessionContext({ id: 'account-a' }, () => states.set('group@g.us', 'A'));
+  runWithSessionContext({ id: 'account-b' }, () => states.set('group@g.us', 'B'));
+  assert.equal(runWithSessionContext({ id: 'account-a' }, () => states.get('group@g.us')), 'A');
+  assert.equal(runWithSessionContext({ id: 'account-b' }, () => states.get('group@g.us')), 'B');
+  assert.equal(states.get('group@g.us'), undefined);
 });
