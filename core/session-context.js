@@ -58,6 +58,39 @@ export function createContextualProxy({ getFallback, contextKey, bindMethods = t
   });
 }
 
+export function createSessionScopedMap() {
+  const buckets = new Map();
+  function bucket() {
+    const id = getSessionContext()?.id || 'primary';
+    let values = buckets.get(id);
+    if (!values) {
+      values = new Map();
+      buckets.set(id, values);
+    }
+    return values;
+  }
+  return {
+    get size() { return bucket().size; },
+    get(key) { return bucket().get(key); },
+    set(key, value) { bucket().set(key, value); return this; },
+    has(key) { return bucket().has(key); },
+    delete(key) {
+      const values = bucket();
+      const removed = values.delete(key);
+      if (!values.size) buckets.delete(getSessionContext()?.id || 'primary');
+      return removed;
+    },
+    clear() {
+      buckets.delete(getSessionContext()?.id || 'primary');
+    },
+    keys() { return bucket().keys(); },
+    values() { return bucket().values(); },
+    entries() { return bucket().entries(); },
+    forEach(callback, thisArg) { return bucket().forEach((value, key) => callback.call(thisArg, value, key, this)); },
+    [Symbol.iterator]() { return this.entries(); },
+  };
+}
+
 export function bindSessionEvent(socket, eventName, handler, context = {}) {
   if (!socket?.ev || typeof socket.ev.on !== 'function') {
     throw new TypeError('A WhatsApp socket with an event emitter is required.');
