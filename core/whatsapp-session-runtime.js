@@ -20,6 +20,8 @@ export function createWhatsAppSessionRuntime({
   openTimeoutMs = 60_000,
   setTimeoutFn = setTimeout,
   clearTimeoutFn = clearTimeout,
+  setIntervalFn = setInterval,
+  clearIntervalFn = clearInterval,
 } = {}) {
   if (!sessionManager || typeof sessionManager.create !== 'function') throw new TypeError('sessionManager is required.');
   if (typeof makeWASocket !== 'function' || typeof useMultiFileAuthState !== 'function') throw new TypeError('Baileys socket and auth functions are required.');
@@ -56,6 +58,7 @@ export function createWhatsAppSessionRuntime({
       socket,
       context,
       reconnectTimer: null,
+      syncTimer: null,
       closed: false,
       expectedPairingNumber: '',
     };
@@ -104,6 +107,13 @@ export function createWhatsAppSessionRuntime({
     }, context);
 
     await onSocket(socket, context, runtime);
+    if (store.enabled) {
+      runtime.syncTimer = setIntervalFn(() => {
+        if (runtime.closed) return;
+        store.sync(directory).catch((error) => logger.error?.({ err: error, sessionId: record.id }, 'WhatsApp session periodic backup failed'));
+      }, 15_000);
+      runtime.syncTimer?.unref?.();
+    }
     return runtime;
   }
 
@@ -180,6 +190,7 @@ export function createWhatsAppSessionRuntime({
     const removed = await sessionManager.remove(id, { force });
     if (!removed) return false;
     if (runtime?.reconnectTimer) clearTimeoutFn(runtime.reconnectTimer);
+    if (runtime?.syncTimer) clearIntervalFn(runtime.syncTimer);
     if (runtime) {
       runtime.closed = true;
       runtimes.delete(id);
@@ -197,11 +208,25 @@ export function createWhatsAppSessionRuntime({
     return true;
   }
 
+  async function shutdown() {
+    const active = [...runtimes.values()];
+    await Promise.allSettled(active.map(async (runtime) => {
+      runtime.closed = true;
+      if (runtime.reconnectTimer) clearTimeoutFn(runtime.reconnectTimer);
+      if (runtime.syncTimer) clearIntervalFn(runtime.syncTimer);
+      try { await runtime.store.sync(runtime.directory); }
+      catch (error) { logger.error?.({ err: error, sessionId: runtime.id }, 'Final WhatsApp session backup failed'); }
+      try { runtime.socket.end?.(undefined); } catch {}
+      runtimes.delete(runtime.id);
+    }));
+  }
+
   return Object.freeze({
     start,
     startExisting,
     requestPairingCode,
     stop,
+    shutdown,
     getSocket(id) { return runtimes.get(id)?.socket || null; },
     getRuntime(id) { return runtimes.get(id) || null; },
     list() { return sessionManager.list(); },
