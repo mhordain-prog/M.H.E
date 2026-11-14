@@ -73,9 +73,11 @@ const RIDDLES = [
 {q:"Je monte et je descends sans bouger. Que suis-je ?",a:["un escalier","escalier"],e:"Un escalier."},
 {q:"Qu’est-ce qui a des aiguilles mais ne coud pas ?",a:["une horloge","horloge","une montre","montre"],e:"Une horloge ou une montre."}
 ];
-const sessions = new Map();
-const numberGames = new Map();
-const hangmanGames = new Map();
+import { createSessionScopedMap } from './session-context.js';
+
+const sessions = createSessionScopedMap();
+const numberGames = createSessionScopedMap();
+const hangmanGames = createSessionScopedMap();
 
 function norm(value="") {
   return String(value).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase()

@@ -7,6 +7,8 @@ import { registerMheEnhancements } from './core/mhe-enhancements.js';
 import { registerControlCenter } from './core/control-center.js';
 import { createWarningManager } from './core/warnings.js';
 import { createSupabaseSessionStore } from './core/session-store.js';
+import { bindSessionEvent, createContextualProxy, createSessionScopedMap, getSessionContext, runWithSessionContext } from './core/session-context.js';
+import { createMultiSessionService } from './core/multi-session-service.js';
 import { registerReferrals } from './core/referrals.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -48,41 +50,64 @@ app.use(express.json({ limit: '2kb' }));
 registerReferrals({ app });
 app.get('/', (_req, res) => res.sendFile(path.resolve('index.html')));
 
-let socket;
+let primarySocket;
+const socket = createContextualProxy({ getFallback: () => primarySocket, contextKey: 'socket' });
 let whatsappConnection = 'starting';
 let authState;
 let saveCreds;
 let reconnectTimer;
 let mode = process.env.BOT_MODE === 'public' ? 'public' : 'private';
-let settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true };
+function defaultSettings() { return { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: false, autotyping: false, autoreact: true }; }
+let primarySettings = defaultSettings();
+function getMode() { return getSessionContext()?.settings?.mode || mode; }
+function setMode(value) { const scoped = getSessionContext()?.settings; if (scoped) scoped.mode = value; else mode = value; }
+const settings = createContextualProxy({ getFallback: () => primarySettings, contextKey: 'settings', bindMethods: false });
 let pairCooldownUntil = 0;
 let pairRequestInProgress = false;
+let pendingPairingNumber = '';
 const pairIpCooldowns = new Map();
+const multiPairIpCooldowns = new Map();
+const multiPairNumberLocks = new Set();
+let multiSessionService;
 const PAIR_COOLDOWN_MS = 45_000;
 const commands = new Map();
 registerControlCenter({
-  app, commands, getSocket: () => socket, getMode: () => mode,
+  app, commands, getSocket: () => socket, getMode,
   getPrefix: () => PREFIX, getOwnerName: () => DISPLAY_OWNER,
   getStartedAt: () => STARTED_AT,
 });
-const recentGroupMessages = new Map();
-let activitySinceSave = 0;
+const recentGroupMessages = createSessionScopedMap();
+const activitySaveCounts = createSessionScopedMap();
 
 async function loadSettings() {
+  const context = getSessionContext();
+  const target = context?.settings || primarySettings;
+  const file = context?.settingsFile || SETTINGS_FILE;
   try {
-    const parsed = JSON.parse(await fs.readFile(SETTINGS_FILE, 'utf8'));
-    settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true, ...parsed, groups: parsed.groups || {} };
-    if (parsed.mode === 'public' || parsed.mode === 'private') mode = parsed.mode;
-    if (typeof parsed.prefix === 'string' && parsed.prefix.length > 0 && parsed.prefix.length <= 3) PREFIX = parsed.prefix;
-    if (typeof parsed.botname === 'string' && parsed.botname.trim()) BOT_NAME = parsed.botname;
-    if (typeof parsed.ownername === 'string' && parsed.ownername.trim()) DISPLAY_OWNER = parsed.ownername;
+    const parsed = JSON.parse(await fs.readFile(file, 'utf8'));
+    Object.assign(target, defaultSettings(), parsed, { groups: parsed.groups || {}, autoread: false, autotyping: false });
+    if (parsed.mode === 'public' || parsed.mode === 'private') target.mode = parsed.mode;
+    if (!context) {
+      if (parsed.mode === 'public' || parsed.mode === 'private') mode = parsed.mode;
+      if (typeof parsed.prefix === 'string' && parsed.prefix.length > 0 && parsed.prefix.length <= 3) PREFIX = parsed.prefix;
+      if (typeof parsed.botname === 'string' && parsed.botname.trim()) BOT_NAME = parsed.botname;
+      if (typeof parsed.ownername === 'string' && parsed.ownername.trim()) DISPLAY_OWNER = parsed.ownername;
+    }
   } catch (error) {
     if (error.code !== 'ENOENT') logger.warn({ err: error }, 'Settings could not be read; using defaults');
+    Object.assign(target, defaultSettings());
+    if (context) target.mode = mode;
   }
 }
 async function saveSettings() {
-  await fs.mkdir(path.dirname(SETTINGS_FILE), { recursive: true });
-  await fs.writeFile(SETTINGS_FILE, JSON.stringify({ ...settings, mode }, null, 2));
+  const context = getSessionContext();
+  const file = context?.settingsFile || SETTINGS_FILE;
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, JSON.stringify({ ...settings, mode: getMode() }, null, 2));
+  const runtime = context?.runtime;
+  if (runtime?.store?.enabled) {
+    await runtime.store.sync(runtime.directory);
+  }
 }
 function register(name, category, description, handler, ownerOnly = false) {
   commands.set(name, { name, category, description, handler, ownerOnly });
@@ -176,7 +201,7 @@ async function executeCommand(message, commandName, args, isOwner) {
   if (!command) return;
   const chat = message.key.remoteJid;
   const actor = senderJid(message);
-  if (mode === 'private' && !isOwner && command.category !== 'FUN & GAMES') return;
+  if (getMode() === 'private' && !isOwner && command.category !== 'FUN & GAMES') return;
   if (command.ownerOnly && !isOwner) {
     await sendText(chat, '⛔ Cette commande est réservée au propriétaire du bot.');
     return;
@@ -214,7 +239,7 @@ register('menu', 'GÉNÉRAL', 'Afficher le menu GOLD et les commandes réellemen
     '⏱️ UPTIME : ' + formatUptime(Date.now() - STARTED_AT),
     '📚 COMMANDS : ' + commands.size,
     '🔖 PREFIX : ' + PREFIX,
-    '🔒 MODE : ' + mode.toUpperCase(),
+    '🔒 MODE : ' + getMode().toUpperCase(),
     '╚════════════════════════════╝',
     'Select a category below to browse commands.'
   ];
@@ -251,7 +276,7 @@ register('ping', 'GÉNÉRAL', 'Vérifier si le bot répond', async ({ chat }) =>
   await sendText(chat, '🏓 M.H.E. répond. Le processus WhatsApp est actif.');
 });
 register('alive', 'GÉNÉRAL', 'État du bot', async ({ chat }) => {
-  await sendText(chat, `✅ ${BOT_NAME} est démarré. Mode : ${mode}. Commandes actives : ${commands.size}.`);
+  await sendText(chat, `✅ ${BOT_NAME} est démarré. Mode : ${getMode()}. Commandes actives : ${commands.size}.`);
 });
 register('owner', 'GÉNÉRAL', 'Afficher le propriétaire connecté', async ({ chat }) => {
   const owner = cleanNumber(socket?.user?.id || '');
@@ -260,12 +285,12 @@ register('owner', 'GÉNÉRAL', 'Afficher le propriétaire connecté', async ({ c
 register('mode', 'PROPRIÉTAIRE', 'Utilisation : .mode private ou .mode public', async ({ chat, args }) => {
   const next = (args[0] || '').toLowerCase();
   if (!['private', 'public'].includes(next)) {
-    await sendText(chat, `Mode actuel : ${mode}. Utilise ${PREFIX}mode private ou ${PREFIX}mode public.`);
+    await sendText(chat, `Mode actuel : ${getMode()}. Utilise ${PREFIX}mode private ou ${PREFIX}mode public.`);
     return;
   }
-  mode = next;
+  setMode(next);
   await saveSettings();
-  await sendText(chat, `✅ Mode modifié : ${mode}.`);
+  await sendText(chat, `✅ Mode modifié : ${getMode()}.`);
 }, true);
 register('tagall', 'GROUPES', 'Mentionner les membres du groupe', async ({ chat, actor, message, args }) => {
   requireGroup(chat);
@@ -666,7 +691,7 @@ for (const alias of ['antilink','antispam','antidelete','antitag','antistatusmen
 register('settings', 'PROPRIÉTAIRE', 'Afficher les réglages enregistrés', async ({ chat, isOwner }) => {
   requireOwner(isOwner);
   const safe = { ...settings, sudo: settings.sudo || [], banned: settings.banned || [] };
-  await sendText(chat, `╭┈───〔 M.H.E OWNER GOLD 〕┈───⊷\nMode : ${mode}\nPréfixe : ${PREFIX}\nBot : ${BOT_NAME}\nPropriétaire affiché : ${DISPLAY_OWNER}\nSUDO : ${safe.sudo.length}\nBannis : ${safe.banned.length}\nBienvenue : ${safe.welcome ? 'ON' : 'OFF'}\nAu revoir : ${safe.goodbye ? 'ON' : 'OFF'}\nAntilink : ${safe.antilink ? 'ON' : 'OFF'}\n╰───────────────────⊷`);
+  await sendText(chat, `╭┈───〔 M.H.E OWNER GOLD 〕┈───⊷\nMode : ${getMode()}\nPréfixe : ${PREFIX}\nBot : ${BOT_NAME}\nPropriétaire affiché : ${DISPLAY_OWNER}\nSUDO : ${safe.sudo.length}\nBannis : ${safe.banned.length}\nBienvenue : ${safe.welcome ? 'ON' : 'OFF'}\nAu revoir : ${safe.goodbye ? 'ON' : 'OFF'}\nAntilink : ${safe.antilink ? 'ON' : 'OFF'}\n╰───────────────────⊷`);
 }, true);
 register('mhe-owner', 'PROPRIÉTAIRE', 'Afficher l’aide OWNER GOLD', async ({ chat, isOwner }) => {
   requireOwner(isOwner);
@@ -696,11 +721,11 @@ register('botinfo', 'GÉNÉRAL', 'Afficher les informations du bot', async ({ ch
     `├✦ Propriétaire : ${DISPLAY_OWNER}`,
     `├✦ Version : ${BOT_VERSION}`,
     `├✦ Préfixe : ${PREFIX}`,
-    `├✦ Mode : ${mode.toUpperCase()}`,
+    `├✦ Mode : ${getMode().toUpperCase()}`,
     `├✦ Commandes enregistrées : ${commands.size}`,
     `├✦ Uptime : ${formatUptime(Date.now() - STARTED_AT)}`,
     '╰━━━━━━━━━━━━━━⊷',
-  ].join('\\n'));
+  ].join('\n'));
 });
 register('chatid', 'GÉNÉRAL', 'Afficher l’identifiant du chat', async ({ chat }) => {
   await sendText(chat, `🆔 ID du chat : ${chat}`);
@@ -951,19 +976,59 @@ app.get('/health', (_req, res) => {
     commands: commands.size,
     mode,
     sessionPersistence: sessionStore.status,
+    multiSessions: {
+      enabled: Boolean(multiSessionService?.enabled),
+      active: multiSessionService?.runtime?.size || 0,
+      total: multiSessionService?.sessionManager?.size || 0,
+    },
   });
 });
 app.post('/api/pair', async (req, res) => {
   const now = Date.now();
   const ip = req.ip || 'unknown';
   const lastIpRequest = pairIpCooldowns.get(ip) || 0;
-  if (pairRequestInProgress || now < pairCooldownUntil || now - lastIpRequest < PAIR_COOLDOWN_MS) {
+  if (!authState?.creds?.registered &&
+      (pairRequestInProgress || now < pairCooldownUntil || now - lastIpRequest < PAIR_COOLDOWN_MS)) {
     return res.status(429).json({ error: 'Une demande est déjà en cours ou vient d’être effectuée. Attends 45 secondes avant de réessayer.' });
   }
   const number = String(req.body?.number || '').replace(/\D/g, '');
   if (number.length < 10 || number.length > 15) {
     return res.status(400).json({ error: 'Entre ton numéro WhatsApp au format international, chiffres uniquement, sans + ni espaces.' });
   }
+
+  // The first account remains the primary legacy connection. Once it is linked,
+  // additional phone numbers receive independent sockets and isolated auth stores.
+  if (authState?.creds?.registered) {
+    const primaryNumber = cleanNumber(primarySocket?.user?.id || primarySocket?.user?.phoneNumber || authState?.creds?.me?.id || '');
+    if (primaryNumber && primaryNumber === number) {
+      return res.status(409).json({ error: 'Ce numéro est déjà connecté comme compte principal M.H.E.' });
+    }
+    if (!multiSessionService?.enabled) {
+      return res.status(503).json({ error: 'Les connexions supplémentaires nécessitent le stockage chiffré Supabase de M.H.E. Il n’est pas activé sur ce serveur.' });
+    }
+    const lastMultiRequest = multiPairIpCooldowns.get(ip) || 0;
+    if (now - lastMultiRequest < PAIR_COOLDOWN_MS || multiPairNumberLocks.has(number)) {
+      return res.status(429).json({ error: 'Attends 45 secondes avant une nouvelle demande de jumelage.' });
+    }
+    multiPairNumberLocks.add(number);
+    multiPairIpCooldowns.set(ip, now);
+    try {
+      const result = await multiSessionService.runtime.requestPairingCode(number);
+      const rawCode = result.code;
+      return res.json({
+        code: rawCode.match(/.{1,4}/g)?.join('-') || rawCode,
+        sessionId: result.session.id,
+        state: result.session.state,
+      });
+    } catch (error) {
+      multiPairIpCooldowns.delete(ip);
+      logger.warn({ err: error }, 'Additional WhatsApp pairing request failed');
+      return res.status(503).json({ error: 'Impossible de créer une session WhatsApp supplémentaire. Vérifie la connexion puis réessaie.' });
+    } finally {
+      multiPairNumberLocks.delete(number);
+    }
+  }
+
   if (!socket || !authState || authState.creds.registered) {
     return res.status(409).json({ error: 'Le service WhatsApp n’est pas disponible pour un nouvel appairage. Vérifie son état puis réessaie.' });
   }
@@ -986,12 +1051,14 @@ app.post('/api/pair', async (req, res) => {
     }
 
     const code = await pairingSocket.requestPairingCode(number);
+    pendingPairingNumber = number;
     logger.warn({ event: 'pairing_code_issued' }, 'WhatsApp pairing code issued');
     return res.json({ code: String(code).match(/.{1,4}/g)?.join('-') || String(code) });
   } catch (error) {
     logger.warn({ err: error }, 'Pairing request failed');
     pairCooldownUntil = 0;
     pairIpCooldowns.delete(ip);
+    if (pendingPairingNumber === number) pendingPairingNumber = '';
     return res.status(503).json({ error: 'Le serveur WhatsApp n’a pas terminé sa connexion. Attends quelques secondes puis réessaie.' });
   } finally {
     pairRequestInProgress = false;
@@ -1002,9 +1069,97 @@ app.get('/api/status', (_req, res) => {
     connected: whatsappConnection === 'open',
     registered: Boolean(authState?.creds?.registered),
     state: whatsappConnection,
+    multiSessions: {
+      enabled: Boolean(multiSessionService?.enabled),
+      sessions: multiSessionService?.sessionManager?.list() || [],
+    },
   });
 });
 const server = app.listen(PORT, '0.0.0.0', () => logger.info({ port: PORT }, 'M.H.E. web server started'));
+
+function attachSessionEventHandlers(targetSocket, context) {
+  bindSessionEvent(targetSocket, 'group-participants.update', async (event) => {
+    try {
+      const group = getGroupSettings(event.id);
+      if (event.action === 'add' && group.welcome) {
+        const mentions = event.participants || [];
+        await sendText(event.id, `👋 Bienvenue ${mentions.map((jid) => `@${cleanNumber(jid)}`).join(', ')} !`, { mentions });
+      }
+      if (event.action === 'remove' && group.goodbye) {
+        const mentions = event.participants || [];
+        await sendText(event.id, `👋 ${mentions.map((jid) => `@${cleanNumber(jid)}`).join(', ')} a quitté le groupe.`, { mentions });
+      }
+    } catch (error) {
+      logger.warn({ err: error }, 'Group participant event failed');
+    }
+  }, context);
+  bindSessionEvent(targetSocket, 'messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return;
+    for (const message of messages) {
+      if (!message.message || message.key.remoteJid === 'status@broadcast') continue;
+      const interactiveId = message.message?.listResponseMessage?.singleSelectReply?.selectedRowId
+        || message.message?.buttonsResponseMessage?.selectedButtonId
+        || message.message?.templateButtonReplyMessage?.selectedId;
+      const text = interactiveId?.startsWith('mhecat:')
+        ? `${PREFIX}menucat ${interactiveId.slice('mhecat:'.length)}`
+        : messageText(message).trim();
+      const actor = senderJid(message);
+      const actorNumber = cleanNumber(actor);
+      const blocked = (settings.banned || []).some((item) => cleanNumber(item) === actorNumber);
+      if (blocked && !message.key.fromMe) continue;
+      if (message.key.remoteJid?.endsWith('@g.us') && !message.key.fromMe) {
+        const groupJid = message.key.remoteJid;
+        const group = getGroupSettings(groupJid);
+        group.activity ||= {};
+        group.activityNames ||= {};
+        group.activity[actor] = (group.activity[actor] || 0) + 1;
+        if (message.pushName) group.activityNames[actor] = message.pushName;
+        const recent = recentGroupMessages.get(groupJid) || [];
+        recent.push(message.key);
+        if (recent.length > 1000) recent.splice(0, recent.length - 1000);
+        recentGroupMessages.set(groupJid, recent);
+        const activityCount = (activitySaveCounts.get('count') || 0) + 1;
+        activitySaveCounts.set('count', activityCount);
+        if (activityCount >= 10) {
+          activitySaveCounts.set('count', 0);
+          saveSettings().catch((error) => logger.warn({ err: error }, 'Could not persist group activity'));
+        }
+      }
+      if (message.key.remoteJid?.endsWith('@g.us') && !message.key.fromMe) {
+        const groupJid = message.key.remoteJid;
+        const group = getGroupSettings(groupJid);
+        const actorJid = senderJid(message);
+        const isStatusMention = Boolean(message.message?.groupStatusMentionMessage);
+        const mentionCount = message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length || 0;
+        const isMassTag = mentionCount >= 5;
+        const isLink = /(?:https?:\/\/|www\.|chat\.whatsapp\.com\/|wa\.me\/|t\.me\/|bit\.ly\/|(?:^|[\s([<{])(?:[a-z0-9-]+\.)+(?:com|net|org|io|co|me|app|dev|gg|xyz|info|site|online|ru|fr|cg|uk|us)(?:\b|\/))/i.test(text);
+        let reason = '';
+        if ((group.antistatusmention ?? settings.antistatusmention) && isStatusMention) reason = 'Mention de statut interdite';
+        else if ((group.antitag ?? settings.antitag) && isMassTag) reason = 'Mention massive interdite';
+        else if ((group.antilink ?? settings.antilink) && isLink) reason = 'Lien interdit';
+        else if ((group.antispam ?? settings.antispam) && warningManager.detectSpam(groupJid, actorJid)) reason = 'Spam / messages répétés';
+        if (reason) {
+          try {
+            await warningManager.warn({ groupJid, actorJid, reason });
+          } catch (error) {
+            logger.warn({ err: error, group: groupJid }, 'Could not issue group warning');
+          }
+          continue;
+        }
+      }
+      if (await handleMheFunGamesIncoming.handleIncoming(message)) continue;
+      if (await handleMheGoldIncoming(message, { mode: getMode() })) continue;
+      if (!text.startsWith(PREFIX)) continue;
+      const [name, ...args] = text.slice(PREFIX.length).trim().split(/\s+/);
+      if (!name) continue;
+      const connectedOwnerNumber = cleanNumber(socket?.user?.id || '');
+      const isOwner = Boolean(message.key.fromMe)
+        || (connectedOwnerNumber && actorNumber === connectedOwnerNumber)
+        || OWNER_NUMBERS.has(actorNumber);
+      await executeCommand(message, name.toLowerCase(), args, isOwner);
+    }
+  }, context);
+}
 
 async function startWhatsApp() {
   if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -1029,7 +1184,7 @@ async function startWhatsApp() {
     sessionSyncTimer.unref?.();
   }
   const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
-  socket = makeWASocket({
+  primarySocket = makeWASocket({
     auth: authState,
     version,
     logger,
@@ -1041,13 +1196,38 @@ async function startWhatsApp() {
     markOnlineOnConnect: false,
     syncFullHistory: false,
   });
-  socket.ev.on('creds.update', saveCreds);
-  socket.ev.on('connection.update', ({ connection, lastDisconnect }) => {
+  bindSessionEvent(primarySocket, 'creds.update', saveCreds, { id: 'primary', settings: primarySettings });
+  bindSessionEvent(primarySocket, 'connection.update', ({ connection, lastDisconnect }) => {
     if (connection) whatsappConnection = connection;
-    if (connection === 'open') logger.info('WhatsApp connected');
+    if (connection === 'open') {
+      logger.info('WhatsApp connected');
+      const expectedNumber = pendingPairingNumber;
+      if (expectedNumber) {
+        pendingPairingNumber = '';
+        const connectedSocket = socket;
+        const connectedNumber = cleanNumber(connectedSocket?.user?.id || connectedSocket?.user?.phoneNumber || '');
+        if (connectedNumber && connectedNumber === expectedNumber) {
+          connectedSocket.sendMessage(connectedSocket.user?.id || `${connectedNumber}@s.whatsapp.net`, {
+            text: [
+              '👑 M.H.E-MD GOLD',
+              '',
+              '✓ CONNEXION RÉUSSIE',
+              'Votre compte WhatsApp est maintenant connecté.',
+              '',
+              'M.H.E-MD GOLD est fonctionnel.',
+              'Envoie .menu pour découvrir les commandes.',
+              '',
+              'GOLDEN BOT SYSTEM • HORDAIN MADILA',
+            ].join('\\n'),
+          }).catch((error) => logger.warn({ err: error }, 'Pairing welcome message could not be delivered'));
+        } else {
+          logger.warn({ event: 'pairing_number_mismatch' }, 'Connected WhatsApp account did not match the number used for pairing');
+        }
+      }
+    }
     if (connection === 'close') {
       whatsappConnection = 'close';
-      socket = undefined;
+      primarySocket = undefined;
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       if (statusCode !== DisconnectReason.loggedOut) {
         reconnectTimer = setTimeout(() => startWhatsApp().catch((err) => logger.error({ err }, 'Reconnect failed')), 3000);
@@ -1078,90 +1258,67 @@ async function startWhatsApp() {
         })();
       }
     }
-  });
-  socket.ev.on('group-participants.update', async (event) => {
-    try {
-      const group = getGroupSettings(event.id);
-      if (event.action === 'add' && group.welcome) {
-        const mentions = event.participants || [];
-        await sendText(event.id, `👋 Bienvenue ${mentions.map((jid) => `@${cleanNumber(jid)}`).join(', ')} !`, { mentions });
-      }
-      if (event.action === 'remove' && group.goodbye) {
-        const mentions = event.participants || [];
-        await sendText(event.id, `👋 ${mentions.map((jid) => `@${cleanNumber(jid)}`).join(', ')} a quitté le groupe.`, { mentions });
-      }
-    } catch (error) {
-      logger.warn({ err: error }, 'Group participant event failed');
-    }
-  });
-  socket.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
-    for (const message of messages) {
-      if (!message.message || message.key.remoteJid === 'status@broadcast') continue;
-      const interactiveId = message.message?.listResponseMessage?.singleSelectReply?.selectedRowId
-        || message.message?.buttonsResponseMessage?.selectedButtonId
-        || message.message?.templateButtonReplyMessage?.selectedId;
-      const text = interactiveId?.startsWith('mhecat:')
-        ? `${PREFIX}menucat ${interactiveId.slice('mhecat:'.length)}`
-        : messageText(message).trim();
-      const actor = senderJid(message);
-      const actorNumber = cleanNumber(actor);
-      const blocked = (settings.banned || []).some((item) => cleanNumber(item) === actorNumber);
-      if (blocked && !message.key.fromMe) continue;
-      if (message.key.remoteJid?.endsWith('@g.us') && !message.key.fromMe) {
-        const groupJid = message.key.remoteJid;
-        const group = getGroupSettings(groupJid);
-        group.activity ||= {};
-        group.activityNames ||= {};
-        group.activity[actor] = (group.activity[actor] || 0) + 1;
-        if (message.pushName) group.activityNames[actor] = message.pushName;
-        const recent = recentGroupMessages.get(groupJid) || [];
-        recent.push(message.key);
-        if (recent.length > 1000) recent.splice(0, recent.length - 1000);
-        recentGroupMessages.set(groupJid, recent);
-        activitySinceSave += 1;
-        if (activitySinceSave >= 10) {
-          activitySinceSave = 0;
-          saveSettings().catch((error) => logger.warn({ err: error }, 'Could not persist group activity'));
-        }
-      }
-      if (message.key.remoteJid?.endsWith('@g.us') && !message.key.fromMe) {
-        const groupJid = message.key.remoteJid;
-        const group = getGroupSettings(groupJid);
-        const actorJid = senderJid(message);
-        const isStatusMention = Boolean(message.message?.groupStatusMentionMessage);
-        const mentionCount = message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length || 0;
-        const isMassTag = mentionCount >= 5;
-        const isLink = /(?:https?:\/\/|www\.|chat\.whatsapp\.com\/|wa\.me\/|t\.me\/|bit\.ly\/|(?:^|[\s([<{])(?:[a-z0-9-]+\.)+(?:com|net|org|io|co|me|app|dev|gg|xyz|info|site|online|ru|fr|cg|uk|us)(?:\b|\/))/i.test(text);
-        let reason = '';
-        if ((group.antistatusmention ?? settings.antistatusmention) && isStatusMention) reason = 'Mention de statut interdite';
-        else if ((group.antitag ?? settings.antitag) && isMassTag) reason = 'Mention massive interdite';
-        else if ((group.antilink ?? settings.antilink) && isLink) reason = 'Lien interdit';
-        else if ((group.antispam ?? settings.antispam) && warningManager.detectSpam(groupJid, actorJid)) reason = 'Spam / messages répétés';
-        if (reason) {
-          try {
-            await warningManager.warn({ groupJid, actorJid, reason });
-          } catch (error) {
-            logger.warn({ err: error, group: groupJid }, 'Could not issue group warning');
-          }
-          continue;
-        }
-      }
-      if (await handleMheFunGamesIncoming.handleIncoming(message)) continue;
-      if (await handleMheGoldIncoming(message, { mode })) continue;
-      if (!text.startsWith(PREFIX)) continue;
-      const [name, ...args] = text.slice(PREFIX.length).trim().split(/\s+/);
-      if (!name) continue;
-      const connectedOwnerNumber = cleanNumber(socket?.user?.id || '');
-      const isOwner = Boolean(message.key.fromMe)
-        || (connectedOwnerNumber && actorNumber === connectedOwnerNumber)
-        || OWNER_NUMBERS.has(actorNumber);
-      await executeCommand(message, name.toLowerCase(), args, isOwner);
-    }
-  });
+  }, { id: 'primary', settings: primarySettings });
+  attachSessionEventHandlers(primarySocket, { id: 'primary', settings: primarySettings, settingsFile: SETTINGS_FILE });
+
 }
 
 await loadSettings();
+multiSessionService = createMultiSessionService({
+  createStore: ({ prefix }) => createSupabaseSessionStore({ logger, prefix }),
+  makeWASocket: (options) => makeWASocket({
+    ...options,
+    logger,
+    browser: ['Ubuntu', 'Chrome', '1.0.0'],
+    connectTimeoutMs: 60_000,
+    defaultQueryTimeoutMs: 60_000,
+    keepAliveIntervalMs: 30_000,
+    syncFullHistory: false,
+  }),
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  disconnectReason: DisconnectReason,
+  rootDirectory: path.join(SESSION_DIR, 'additional'),
+  maxSessions: Number(process.env.MHE_MAX_SESSIONS || 20),
+  logger,
+  onSocket: async (sessionSocket, context, runtime) => {
+    context.settingsFile = path.join(runtime.directory, 'settings.json');
+    context.runtime = runtime;
+    await runWithSessionContext(context, () => loadSettings());
+    attachSessionEventHandlers(sessionSocket, context);
+    bindSessionEvent(sessionSocket, 'connection.update', async ({ connection }) => {
+      if (connection !== 'open' || !runtime.expectedPairingNumber) return;
+      const expected = runtime.expectedPairingNumber;
+      const connectedNumber = cleanNumber(sessionSocket.user?.id || sessionSocket.user?.phoneNumber || '');
+      if (connectedNumber !== expected) {
+        logger.warn({ sessionId: runtime.id, event: 'pairing_number_mismatch' }, 'Additional WhatsApp account did not match the requested number');
+        return;
+      }
+      runtime.expectedPairingNumber = '';
+      const jid = sessionSocket.user?.id || `${connectedNumber}@s.whatsapp.net`;
+      await sessionSocket.sendMessage(jid, {
+        text: [
+          '👑 M.H.E-MD GOLD',
+          '',
+          '✓ CONNEXION RÉUSSIE',
+          'Votre compte WhatsApp est maintenant connecté.',
+          '',
+          'M.H.E-MD GOLD est fonctionnel.',
+          'Envoie .menu pour découvrir les commandes.',
+          '',
+          'GOLDEN BOT SYSTEM • HORDAIN MADILA',
+        ].join('\\n'),
+      }).catch((error) => logger.warn({ err: error, sessionId: runtime.id }, 'Additional session welcome message could not be delivered'));
+    }, context);
+  },
+});
+try {
+  const initialized = await multiSessionService.initialize();
+  if (!initialized.enabled) logger.warn({ reason: initialized.reason }, 'Additional WhatsApp sessions disabled until encrypted registry storage is configured');
+} catch (error) {
+  logger.error({ err: error }, 'Additional WhatsApp session service could not initialize');
+  multiSessionService = undefined;
+}
 const handleMheFunGamesIncoming = registerMheFunGames({
   register, sendText, settings, saveSettings, getPrefix: () => PREFIX,
 });
@@ -1213,11 +1370,16 @@ register('resetwarn', 'GROUPES', 'Réinitialiser les avertissements d’un membr
 
 registerMheEnhancements({
   register, commands, sendText, getSocket: () => socket, settings, saveSettings,
-  getPrefix: () => PREFIX, getMode: () => mode, getBotName: () => BOT_NAME,
+  getPrefix: () => PREFIX, getMode, getBotName: () => BOT_NAME,
   getOwnerName: () => DISPLAY_OWNER, getVersion: () => BOT_VERSION,
   getStartedAt: () => STARTED_AT, getGroupContext: groupContext, requireGroup,
 });
 
+if (multiSessionService?.enabled) {
+  await multiSessionService.startRestored().catch((error) => {
+    logger.error({ err: error }, 'Restored additional WhatsApp sessions could not be started');
+  });
+}
 await startWhatsApp().catch((error) => {
   whatsappConnection = 'error';
   logger.error({ err: error }, 'WhatsApp startup failed');
@@ -1226,6 +1388,7 @@ process.on('SIGTERM', async () => {
   server.close();
   if (sessionSyncTimer) clearInterval(sessionSyncTimer);
   try { await sessionStore.sync(SESSION_DIR); } catch (error) { logger.error({ err: error }, 'Final WhatsApp session backup failed'); }
-  try { socket?.end(undefined); } catch {}
+  try { await multiSessionService?.shutdown?.(); } catch (error) { logger.error({ err: error }, 'Additional WhatsApp sessions shutdown failed'); }
+  try { primarySocket?.end(undefined); } catch {}
   process.exit(0);
 });
