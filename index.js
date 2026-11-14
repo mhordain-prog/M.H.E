@@ -7,7 +7,7 @@ import { registerMheEnhancements } from './core/mhe-enhancements.js';
 import { registerControlCenter } from './core/control-center.js';
 import { createWarningManager } from './core/warnings.js';
 import { createSupabaseSessionStore } from './core/session-store.js';
-import { bindSessionEvent, createContextualProxy } from './core/session-context.js';
+import { bindSessionEvent, createContextualProxy, createSessionScopedMap } from './core/session-context.js';
 import { registerReferrals } from './core/referrals.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -69,7 +69,7 @@ registerControlCenter({
   getPrefix: () => PREFIX, getOwnerName: () => DISPLAY_OWNER,
   getStartedAt: () => STARTED_AT,
 });
-const recentGroupMessages = new Map();
+const recentGroupMessages = createSessionScopedMap();
 let activitySinceSave = 0;
 
 async function loadSettings() {
