@@ -7,6 +7,7 @@ import { registerMheEnhancements } from './core/mhe-enhancements.js';
 import { registerControlCenter } from './core/control-center.js';
 import { createWarningManager } from './core/warnings.js';
 import { createSupabaseSessionStore } from './core/session-store.js';
+import { bindSessionEvent, createContextualProxy } from './core/session-context.js';
 import { registerReferrals } from './core/referrals.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -48,13 +49,15 @@ app.use(express.json({ limit: '2kb' }));
 registerReferrals({ app });
 app.get('/', (_req, res) => res.sendFile(path.resolve('index.html')));
 
-let socket;
+let primarySocket;
+const socket = createContextualProxy({ getFallback: () => primarySocket, contextKey: 'socket' });
 let whatsappConnection = 'starting';
 let authState;
 let saveCreds;
 let reconnectTimer;
 let mode = process.env.BOT_MODE === 'public' ? 'public' : 'private';
-let settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true };
+let primarySettings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true };
+const settings = createContextualProxy({ getFallback: () => primarySettings, contextKey: 'settings', bindMethods: false });
 let pairCooldownUntil = 0;
 let pairRequestInProgress = false;
 let pendingPairingNumber = '';
@@ -72,7 +75,7 @@ let activitySinceSave = 0;
 async function loadSettings() {
   try {
     const parsed = JSON.parse(await fs.readFile(SETTINGS_FILE, 'utf8'));
-    settings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true, ...parsed, groups: parsed.groups || {} };
+    primarySettings = { groups: {}, sudo: [], banned: [], welcome: true, goodbye: true, antilink: false, antispam: false, antitag: false, antistatusmention: false, autoread: true, autotyping: true, autoreact: true, ...parsed, groups: parsed.groups || {} };
     if (parsed.mode === 'public' || parsed.mode === 'private') mode = parsed.mode;
     if (typeof parsed.prefix === 'string' && parsed.prefix.length > 0 && parsed.prefix.length <= 3) PREFIX = parsed.prefix;
     if (typeof parsed.botname === 'string' && parsed.botname.trim()) BOT_NAME = parsed.botname;
@@ -1032,7 +1035,7 @@ async function startWhatsApp() {
     sessionSyncTimer.unref?.();
   }
   const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
-  socket = makeWASocket({
+  primarySocket = makeWASocket({
     auth: authState,
     version,
     logger,
@@ -1044,8 +1047,8 @@ async function startWhatsApp() {
     markOnlineOnConnect: false,
     syncFullHistory: false,
   });
-  socket.ev.on('creds.update', saveCreds);
-  socket.ev.on('connection.update', ({ connection, lastDisconnect }) => {
+  bindSessionEvent(primarySocket, 'creds.update', saveCreds, { id: 'primary', settings: primarySettings });
+  bindSessionEvent(primarySocket, 'connection.update', ({ connection, lastDisconnect }) => {
     if (connection) whatsappConnection = connection;
     if (connection === 'open') {
       logger.info('WhatsApp connected');
@@ -1075,7 +1078,7 @@ async function startWhatsApp() {
     }
     if (connection === 'close') {
       whatsappConnection = 'close';
-      socket = undefined;
+      primarySocket = undefined;
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       if (statusCode !== DisconnectReason.loggedOut) {
         reconnectTimer = setTimeout(() => startWhatsApp().catch((err) => logger.error({ err }, 'Reconnect failed')), 3000);
@@ -1106,8 +1109,8 @@ async function startWhatsApp() {
         })();
       }
     }
-  });
-  socket.ev.on('group-participants.update', async (event) => {
+  }, { id: 'primary', settings: primarySettings });
+  bindSessionEvent(primarySocket, 'group-participants.update', async (event) => {
     try {
       const group = getGroupSettings(event.id);
       if (event.action === 'add' && group.welcome) {
@@ -1121,8 +1124,8 @@ async function startWhatsApp() {
     } catch (error) {
       logger.warn({ err: error }, 'Group participant event failed');
     }
-  });
-  socket.ev.on('messages.upsert', async ({ messages, type }) => {
+  }, { id: 'primary', settings: primarySettings });
+  bindSessionEvent(primarySocket, 'messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return;
     for (const message of messages) {
       if (!message.message || message.key.remoteJid === 'status@broadcast') continue;
@@ -1186,7 +1189,7 @@ async function startWhatsApp() {
         || OWNER_NUMBERS.has(actorNumber);
       await executeCommand(message, name.toLowerCase(), args, isOwner);
     }
-  });
+  }, { id: 'primary', settings: primarySettings });
 }
 
 await loadSettings();
@@ -1254,6 +1257,6 @@ process.on('SIGTERM', async () => {
   server.close();
   if (sessionSyncTimer) clearInterval(sessionSyncTimer);
   try { await sessionStore.sync(SESSION_DIR); } catch (error) { logger.error({ err: error }, 'Final WhatsApp session backup failed'); }
-  try { socket?.end(undefined); } catch {}
+  try { primarySocket?.end(undefined); } catch {}
   process.exit(0);
 });
