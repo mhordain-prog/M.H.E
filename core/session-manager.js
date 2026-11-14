@@ -44,6 +44,7 @@ export function createSessionManager({
   maxSessions = 50,
   idFactory = randomUUID,
   persist = async () => {},
+  initialSessions = [],
   now = () => new Date().toISOString(),
 } = {}) {
   if (!Number.isInteger(maxSessions) || maxSessions < 1 || maxSessions > 500) {
@@ -53,8 +54,35 @@ export function createSessionManager({
     throw new TypeError('idFactory, persist and now must be functions.');
   }
 
+  if (!Array.isArray(initialSessions) || initialSessions.length > maxSessions) {
+    throw new TypeError('initialSessions must be an array within maxSessions.');
+  }
   const sessions = new Map();
   const numberIndex = new Map();
+  for (const item of initialSessions) {
+    if (!item || typeof item !== 'object') throw new TypeError('Invalid restored session record.');
+    const id = String(item.id || '');
+    const number = normalizeNumber(item.number);
+    if (!/^[a-zA-Z0-9-]{8,80}$/.test(id) || sessions.has(id) || numberIndex.has(number)) {
+      throw new TypeError('Restored session identifiers and numbers must be unique and valid.');
+    }
+    if (!SESSION_STATES.has(item.state)) throw new TypeError('Restored session state is invalid.');
+    if (item.isPrimary && [...sessions.values()].some((entry) => entry.isPrimary)) {
+      throw new TypeError('Only one restored primary session is allowed.');
+    }
+    const record = {
+      id,
+      number,
+      isPrimary: Boolean(item.isPrimary),
+      state: item.state,
+      createdAt: typeof item.createdAt === 'string' ? item.createdAt : now(),
+      updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : now(),
+      lastActivityAt: typeof item.lastActivityAt === 'string' ? item.lastActivityAt : null,
+      errorCode: item.state === 'error' ? String(item.errorCode || 'unknown').slice(0, 80) : null,
+    };
+    sessions.set(id, record);
+    numberIndex.set(number, id);
+  }
   const locks = new Map();
   let mutationQueue = Promise.resolve();
 
