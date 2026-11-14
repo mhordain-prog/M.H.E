@@ -13,6 +13,7 @@ async function setup(t) {
   let id = 0;
   const sessionManager = createSessionManager({ idFactory: () => `runtime-${++id}` });
   const sockets = [];
+  const timers = [];
   const runtime = createWhatsAppSessionRuntime({
     sessionManager,
     rootDirectory,
@@ -24,7 +25,7 @@ async function setup(t) {
         user: { id: `24380000000${sockets.length}:1@s.whatsapp.net` },
         waitForSocketOpen: async () => {},
         requestPairingCode: async (number) => `CODE-${number}`,
-        end() {},
+        end() { socket.ended = true; },
       };
       sockets.push(socket);
       return socket;
@@ -42,8 +43,10 @@ async function setup(t) {
     }),
     onSocket: async () => {},
     logger: { info() {}, warn() {}, error() {} },
+    setTimeoutFn: (fn, ms) => { const timer = { fn, ms, cleared: false, unref() {} }; timers.push(timer); return timer; },
+    clearTimeoutFn: (timer) => { if (timer) timer.cleared = true; },
   });
-  return { runtime, sessionManager, sockets, rootDirectory };
+  return { runtime, sessionManager, sockets, timers, rootDirectory };
 }
 
 test('starts two independent WhatsApp sockets with separate auth paths and storage prefixes', async (t) => {
@@ -83,4 +86,32 @@ test('marks the matching runtime connected when its socket opens', async (t) => 
   assert.equal(sessionManager.get(record.id).state, 'connected');
   assert.ok(sessionManager.get(record.id).lastActivityAt);
   assert.equal(runtime.getSocket(record.id), sockets[0]);
+});
+
+test('reconnect closes the stale socket before opening a replacement', async (t) => {
+  const { runtime, sessionManager, sockets, timers } = await setup(t);
+  const record = await runtime.start({ number: '243811111111' });
+  const staleSocket = sockets[0];
+  staleSocket.ev.emit('connection.update', { connection: 'close', lastDisconnect: { error: new Error('network') } });
+  await new Promise((resolve) => setImmediate(resolve));
+  const reconnectTimer = timers.find((timer) => timer.ms === 3000 && !timer.cleared);
+  assert.ok(reconnectTimer, 'reconnect timer is scheduled');
+  await reconnectTimer.fn();
+  assert.equal(staleSocket.ended, true);
+  assert.equal(sockets.length, 2);
+  assert.notEqual(runtime.getSocket(record.id), staleSocket);
+  assert.equal(sessionManager.get(record.id).state, 'reconnecting');
+});
+
+test('removing a session deletes local auth files and its encrypted remote prefix', async (t) => {
+  const { runtime, sessionManager, rootDirectory } = await setup(t);
+  const record = await runtime.start({ number: '243811111111' });
+  const directory = path.join(rootDirectory, record.id);
+  let remoteCleared = false;
+  const activeRuntime = runtime.getRuntime(record.id);
+  activeRuntime.store.clear = async () => { remoteCleared = true; };
+  assert.equal(await runtime.stop(record.id, { force: true }), true);
+  assert.equal(remoteCleared, true);
+  await assert.rejects(fs.stat(directory), { code: 'ENOENT' });
+  assert.equal(sessionManager.get(record.id), null);
 });
