@@ -104,6 +104,10 @@ async function saveSettings() {
   const file = context?.settingsFile || SETTINGS_FILE;
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, JSON.stringify({ ...settings, mode: getMode() }, null, 2));
+  const runtime = context?.runtime;
+  if (runtime?.store?.enabled) {
+    await runtime.store.sync(runtime.directory);
+  }
 }
 function register(name, category, description, handler, ownerOnly = false) {
   commands.set(name, { name, category, description, handler, ownerOnly });
@@ -1260,6 +1264,61 @@ async function startWhatsApp() {
 }
 
 await loadSettings();
+multiSessionService = createMultiSessionService({
+  createStore: ({ prefix }) => createSupabaseSessionStore({ logger, prefix }),
+  makeWASocket: (options) => makeWASocket({
+    ...options,
+    logger,
+    browser: ['Ubuntu', 'Chrome', '1.0.0'],
+    connectTimeoutMs: 60_000,
+    defaultQueryTimeoutMs: 60_000,
+    keepAliveIntervalMs: 30_000,
+    syncFullHistory: false,
+  }),
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  disconnectReason: DisconnectReason,
+  rootDirectory: path.join(SESSION_DIR, 'additional'),
+  maxSessions: Number(process.env.MHE_MAX_SESSIONS || 20),
+  logger,
+  onSocket: async (sessionSocket, context, runtime) => {
+    context.settingsFile = path.join(runtime.directory, 'settings.json');
+    context.runtime = runtime;
+    await runWithSessionContext(context, () => loadSettings());
+    attachSessionEventHandlers(sessionSocket, context);
+    bindSessionEvent(sessionSocket, 'connection.update', async ({ connection }) => {
+      if (connection !== 'open' || !runtime.expectedPairingNumber) return;
+      const expected = runtime.expectedPairingNumber;
+      const connectedNumber = cleanNumber(sessionSocket.user?.id || sessionSocket.user?.phoneNumber || '');
+      if (connectedNumber !== expected) {
+        logger.warn({ sessionId: runtime.id, event: 'pairing_number_mismatch' }, 'Additional WhatsApp account did not match the requested number');
+        return;
+      }
+      runtime.expectedPairingNumber = '';
+      const jid = sessionSocket.user?.id || `${connectedNumber}@s.whatsapp.net`;
+      await sessionSocket.sendMessage(jid, {
+        text: [
+          '👑 M.H.E-MD GOLD',
+          '',
+          '✓ CONNEXION RÉUSSIE',
+          'Votre compte WhatsApp est maintenant connecté.',
+          '',
+          'M.H.E-MD GOLD est fonctionnel.',
+          'Envoie .menu pour découvrir les commandes.',
+          '',
+          'GOLDEN BOT SYSTEM • HORDAIN MADILA',
+        ].join('\\n'),
+      }).catch((error) => logger.warn({ err: error, sessionId: runtime.id }, 'Additional session welcome message could not be delivered'));
+    }, context);
+  },
+});
+try {
+  const initialized = await multiSessionService.initialize();
+  if (!initialized.enabled) logger.warn({ reason: initialized.reason }, 'Additional WhatsApp sessions disabled until encrypted registry storage is configured');
+} catch (error) {
+  logger.error({ err: error }, 'Additional WhatsApp session service could not initialize');
+  multiSessionService = undefined;
+}
 const handleMheFunGamesIncoming = registerMheFunGames({
   register, sendText, settings, saveSettings, getPrefix: () => PREFIX,
 });
@@ -1316,6 +1375,11 @@ registerMheEnhancements({
   getStartedAt: () => STARTED_AT, getGroupContext: groupContext, requireGroup,
 });
 
+if (multiSessionService?.enabled) {
+  await multiSessionService.startRestored().catch((error) => {
+    logger.error({ err: error }, 'Restored additional WhatsApp sessions could not be started');
+  });
+}
 await startWhatsApp().catch((error) => {
   whatsappConnection = 'error';
   logger.error({ err: error }, 'WhatsApp startup failed');
