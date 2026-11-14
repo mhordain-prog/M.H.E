@@ -22,6 +22,7 @@ test('initializes the multi-session service with durable registry persistence', 
   const service = createMultiSessionService({
     ...runtimeDependencies(),
     registryDirectory: path.join(root, 'registry'),
+    encryptionKey: Buffer.alloc(32, 7).toString('base64'),
     sessionDirectory: path.join(root, 'sessions'),
     createStore: ({ prefix }) => ({
       enabled: true,
