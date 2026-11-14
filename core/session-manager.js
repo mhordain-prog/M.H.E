@@ -56,12 +56,20 @@ export function createSessionManager({
   const sessions = new Map();
   const numberIndex = new Map();
   const locks = new Map();
+  let mutationQueue = Promise.resolve();
+
+  function serializeMutation(operation) {
+    const result = mutationQueue.then(operation);
+    mutationQueue = result.catch(() => {});
+    return result;
+  }
 
   async function save() {
     await persist([...sessions.values()].map((record) => ({ ...record })));
   }
 
-  async function create({ number, isPrimary = false } = {}) {
+  function create({ number, isPrimary = false } = {}) {
+    return serializeMutation(async () => {
     const normalized = normalizeNumber(number);
     const existingId = numberIndex.get(normalized);
     if (existingId) return publicRecord(sessions.get(existingId));
@@ -94,9 +102,11 @@ export function createSessionManager({
       throw error;
     }
     return publicRecord(record);
+    });
   }
 
-  async function setState(id, nextState, { errorCode = null, activity = false } = {}) {
+  function setState(id, nextState, { errorCode = null, activity = false } = {}) {
+    return serializeMutation(async () => {
     if (!SESSION_STATES.has(nextState)) throw new TypeError('Unknown WhatsApp session state.');
     const record = sessions.get(id);
     if (!record) throw new Error('Session M.H.E introuvable.');
@@ -115,9 +125,11 @@ export function createSessionManager({
       throw error;
     }
     return publicRecord(record);
+    });
   }
 
-  async function remove(id, { force = false } = {}) {
+  function remove(id, { force = false } = {}) {
+    return serializeMutation(async () => {
     const record = sessions.get(id);
     if (!record) return false;
     if (record.state === 'connected' && !force) {
@@ -134,6 +146,7 @@ export function createSessionManager({
       throw error;
     }
     return true;
+    });
   }
 
   async function withLock(id, operation) {
