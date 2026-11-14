@@ -14,6 +14,7 @@ async function setup(t) {
   const sessionManager = createSessionManager({ idFactory: () => `runtime-${++id}` });
   const sockets = [];
   const timers = [];
+  const intervals = [];
   const runtime = createWhatsAppSessionRuntime({
     sessionManager,
     rootDirectory,
@@ -36,6 +37,7 @@ async function setup(t) {
     }),
     fetchLatestBaileysVersion: async () => ({ version: [2, 3000, 1] }),
     createStore: ({ prefix }) => ({
+      enabled: true,
       prefix,
       restore: async () => ({ enabled: true, restored: 0 }),
       sync: async () => ({ enabled: true, uploaded: 0 }),
@@ -45,8 +47,10 @@ async function setup(t) {
     logger: { info() {}, warn() {}, error() {} },
     setTimeoutFn: (fn, ms) => { const timer = { fn, ms, cleared: false, unref() {} }; timers.push(timer); return timer; },
     clearTimeoutFn: (timer) => { if (timer) timer.cleared = true; },
+    setIntervalFn: (fn, ms) => { const timer = { fn, ms, cleared: false, unref() {} }; intervals.push(timer); return timer; },
+    clearIntervalFn: (timer) => { if (timer) timer.cleared = true; },
   });
-  return { runtime, sessionManager, sockets, timers, rootDirectory };
+  return { runtime, sessionManager, sockets, timers, intervals, rootDirectory };
 }
 
 test('starts two independent WhatsApp sockets with separate auth paths and storage prefixes', async (t) => {
@@ -117,4 +121,19 @@ test('removing a session deletes local auth files and its encrypted remote prefi
   assert.equal(remoteCleared, true);
   await assert.rejects(fs.stat(directory), { code: 'ENOENT' });
   assert.equal(sessionManager.get(record.id), null);
+});
+
+test('periodically backs up each session and flushes it during graceful shutdown', async (t) => {
+  const { runtime, sockets, intervals } = await setup(t);
+  const record = await runtime.start({ number: '243811111111' });
+  const periodic = intervals.find((timer) => timer.ms === 15_000 && !timer.cleared);
+  assert.ok(periodic, 'a periodic encrypted backup is scheduled');
+  let finalSyncs = 0;
+  runtime.getRuntime(record.id).store.sync = async () => { finalSyncs += 1; };
+  await periodic.fn();
+  await runtime.shutdown();
+  assert.equal(finalSyncs, 2);
+  assert.equal(sockets[0].ended, true);
+  assert.equal(periodic.cleared, true);
+  assert.equal(runtime.size, 0);
 });
