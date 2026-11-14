@@ -1388,6 +1388,7 @@ process.on('SIGTERM', async () => {
   server.close();
   if (sessionSyncTimer) clearInterval(sessionSyncTimer);
   try { await sessionStore.sync(SESSION_DIR); } catch (error) { logger.error({ err: error }, 'Final WhatsApp session backup failed'); }
+  try { await multiSessionService?.shutdown?.(); } catch (error) { logger.error({ err: error }, 'Additional WhatsApp sessions shutdown failed'); }
   try { primarySocket?.end(undefined); } catch {}
   process.exit(0);
 });
