@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { createDurableSessionRegistry } from '../core/session-registry-store.js';
 
+const encryptionKey = Buffer.alloc(32, 7).toString('base64');
+
 test('loads and persists a versioned session registry through the encrypted store adapter', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mhe-registry-'));
   const remote = new Map();
@@ -25,7 +27,7 @@ test('loads and persists a versioned session registry through the encrypted stor
   };
 
   try {
-    const registry = createDurableSessionRegistry({ store, directory });
+    const registry = createDurableSessionRegistry({ store, directory, encryptionKey });
     assert.deepEqual(await registry.load(), { enabled: true, sessions: [] });
     await registry.persist([{
       id: 'session-12345678',
@@ -34,8 +36,10 @@ test('loads and persists a versioned session registry through the encrypted stor
       isPrimary: true,
     }]);
     assert.equal(remote.has('registry.json'), true);
+    const localRegistry = await fs.readFile(path.join(directory, 'registry.json'));
+    assert.equal(localRegistry.includes(Buffer.from('243811111111')), false);
 
-    const restored = createDurableSessionRegistry({ store, directory: path.join(root, 'restart') });
+    const restored = createDurableSessionRegistry({ store, directory: path.join(root, 'restart'), encryptionKey });
     const snapshot = await restored.load();
     assert.equal(snapshot.enabled, true);
     assert.equal(snapshot.sessions.length, 1);
