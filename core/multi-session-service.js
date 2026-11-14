@@ -70,6 +70,7 @@ export function createMultiSessionService({
   return Object.freeze({
     initialize,
     startRestored,
+    async shutdown() { await runtime?.shutdown?.(); },
     get runtime() { return runtime || null; },
     get sessionManager() { return manager || null; },
     get enabled() { return Boolean(runtime); },
