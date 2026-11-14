@@ -92,7 +92,7 @@ test('reconnect closes the stale socket before opening a replacement', async (t)
   const { runtime, sessionManager, sockets, timers } = await setup(t);
   const record = await runtime.start({ number: '243811111111' });
   const staleSocket = sockets[0];
-  staleSocket.ev.emit('connection.update', { connection: 'close', lastDisconnect: { error: new Error('network') } });
+  staleSocket.ev.emit('connection.update', { connection: 'close', lastDisconnect: { error: Object.assign(new Error('network'), { output: { statusCode: 500 } }) } });
   let reconnectTimer;
   for (let attempt = 0; attempt < 20 && !reconnectTimer; attempt += 1) {
     await new Promise((resolve) => setImmediate(resolve));
