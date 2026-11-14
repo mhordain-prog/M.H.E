@@ -12,7 +12,7 @@ const SESSION_STATES = new Set([
 ]);
 const TRANSITIONS = {
   pending: new Set(['pairing', 'logged_out', 'error']),
-  pairing: new Set(['connected', 'pending', 'disconnected', 'logged_out', 'error']),
+  pairing: new Set(['connected', 'pending', 'reconnecting', 'disconnected', 'logged_out', 'error']),
   connected: new Set(['reconnecting', 'disconnected', 'logged_out', 'error']),
   reconnecting: new Set(['connected', 'disconnected', 'logged_out', 'error']),
   disconnected: new Set(['pairing', 'reconnecting', 'logged_out', 'error']),
