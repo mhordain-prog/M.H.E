@@ -1026,6 +1026,90 @@ app.get('/api/status', (_req, res) => {
 });
 const server = app.listen(PORT, '0.0.0.0', () => logger.info({ port: PORT }, 'M.H.E. web server started'));
 
+function attachSessionEventHandlers(targetSocket, context) {
+  bindSessionEvent(targetSocket, 'group-participants.update', async (event) => {
+    try {
+      const group = getGroupSettings(event.id);
+      if (event.action === 'add' && group.welcome) {
+        const mentions = event.participants || [];
+        await sendText(event.id, `👋 Bienvenue ${mentions.map((jid) => `@${cleanNumber(jid)}`).join(', ')} !`, { mentions });
+      }
+      if (event.action === 'remove' && group.goodbye) {
+        const mentions = event.participants || [];
+        await sendText(event.id, `👋 ${mentions.map((jid) => `@${cleanNumber(jid)}`).join(', ')} a quitté le groupe.`, { mentions });
+      }
+    } catch (error) {
+      logger.warn({ err: error }, 'Group participant event failed');
+    }
+  }, context);
+  bindSessionEvent(targetSocket, 'messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return;
+    for (const message of messages) {
+      if (!message.message || message.key.remoteJid === 'status@broadcast') continue;
+      const interactiveId = message.message?.listResponseMessage?.singleSelectReply?.selectedRowId
+        || message.message?.buttonsResponseMessage?.selectedButtonId
+        || message.message?.templateButtonReplyMessage?.selectedId;
+      const text = interactiveId?.startsWith('mhecat:')
+        ? `${PREFIX}menucat ${interactiveId.slice('mhecat:'.length)}`
+        : messageText(message).trim();
+      const actor = senderJid(message);
+      const actorNumber = cleanNumber(actor);
+      const blocked = (settings.banned || []).some((item) => cleanNumber(item) === actorNumber);
+      if (blocked && !message.key.fromMe) continue;
+      if (message.key.remoteJid?.endsWith('@g.us') && !message.key.fromMe) {
+        const groupJid = message.key.remoteJid;
+        const group = getGroupSettings(groupJid);
+        group.activity ||= {};
+        group.activityNames ||= {};
+        group.activity[actor] = (group.activity[actor] || 0) + 1;
+        if (message.pushName) group.activityNames[actor] = message.pushName;
+        const recent = recentGroupMessages.get(groupJid) || [];
+        recent.push(message.key);
+        if (recent.length > 1000) recent.splice(0, recent.length - 1000);
+        recentGroupMessages.set(groupJid, recent);
+        const activityCount = (activitySaveCounts.get('count') || 0) + 1;
+        activitySaveCounts.set('count', activityCount);
+        if (activityCount >= 10) {
+          activitySaveCounts.set('count', 0);
+          saveSettings().catch((error) => logger.warn({ err: error }, 'Could not persist group activity'));
+        }
+      }
+      if (message.key.remoteJid?.endsWith('@g.us') && !message.key.fromMe) {
+        const groupJid = message.key.remoteJid;
+        const group = getGroupSettings(groupJid);
+        const actorJid = senderJid(message);
+        const isStatusMention = Boolean(message.message?.groupStatusMentionMessage);
+        const mentionCount = message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length || 0;
+        const isMassTag = mentionCount >= 5;
+        const isLink = /(?:https?:\/\/|www\.|chat\.whatsapp\.com\/|wa\.me\/|t\.me\/|bit\.ly\/|(?:^|[\s([<{])(?:[a-z0-9-]+\.)+(?:com|net|org|io|co|me|app|dev|gg|xyz|info|site|online|ru|fr|cg|uk|us)(?:\b|\/))/i.test(text);
+        let reason = '';
+        if ((group.antistatusmention ?? settings.antistatusmention) && isStatusMention) reason = 'Mention de statut interdite';
+        else if ((group.antitag ?? settings.antitag) && isMassTag) reason = 'Mention massive interdite';
+        else if ((group.antilink ?? settings.antilink) && isLink) reason = 'Lien interdit';
+        else if ((group.antispam ?? settings.antispam) && warningManager.detectSpam(groupJid, actorJid)) reason = 'Spam / messages répétés';
+        if (reason) {
+          try {
+            await warningManager.warn({ groupJid, actorJid, reason });
+          } catch (error) {
+            logger.warn({ err: error, group: groupJid }, 'Could not issue group warning');
+          }
+          continue;
+        }
+      }
+      if (await handleMheFunGamesIncoming.handleIncoming(message)) continue;
+      if (await handleMheGoldIncoming(message, { mode: getMode() })) continue;
+      if (!text.startsWith(PREFIX)) continue;
+      const [name, ...args] = text.slice(PREFIX.length).trim().split(/\s+/);
+      if (!name) continue;
+      const connectedOwnerNumber = cleanNumber(socket?.user?.id || '');
+      const isOwner = Boolean(message.key.fromMe)
+        || (connectedOwnerNumber && actorNumber === connectedOwnerNumber)
+        || OWNER_NUMBERS.has(actorNumber);
+      await executeCommand(message, name.toLowerCase(), args, isOwner);
+    }
+  }, context);
+}
+
 async function startWhatsApp() {
   if (reconnectTimer) clearTimeout(reconnectTimer);
   whatsappConnection = 'connecting';
@@ -1124,86 +1208,8 @@ async function startWhatsApp() {
       }
     }
   }, { id: 'primary', settings: primarySettings });
-  bindSessionEvent(primarySocket, 'group-participants.update', async (event) => {
-    try {
-      const group = getGroupSettings(event.id);
-      if (event.action === 'add' && group.welcome) {
-        const mentions = event.participants || [];
-        await sendText(event.id, `👋 Bienvenue ${mentions.map((jid) => `@${cleanNumber(jid)}`).join(', ')} !`, { mentions });
-      }
-      if (event.action === 'remove' && group.goodbye) {
-        const mentions = event.participants || [];
-        await sendText(event.id, `👋 ${mentions.map((jid) => `@${cleanNumber(jid)}`).join(', ')} a quitté le groupe.`, { mentions });
-      }
-    } catch (error) {
-      logger.warn({ err: error }, 'Group participant event failed');
-    }
-  }, { id: 'primary', settings: primarySettings });
-  bindSessionEvent(primarySocket, 'messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
-    for (const message of messages) {
-      if (!message.message || message.key.remoteJid === 'status@broadcast') continue;
-      const interactiveId = message.message?.listResponseMessage?.singleSelectReply?.selectedRowId
-        || message.message?.buttonsResponseMessage?.selectedButtonId
-        || message.message?.templateButtonReplyMessage?.selectedId;
-      const text = interactiveId?.startsWith('mhecat:')
-        ? `${PREFIX}menucat ${interactiveId.slice('mhecat:'.length)}`
-        : messageText(message).trim();
-      const actor = senderJid(message);
-      const actorNumber = cleanNumber(actor);
-      const blocked = (settings.banned || []).some((item) => cleanNumber(item) === actorNumber);
-      if (blocked && !message.key.fromMe) continue;
-      if (message.key.remoteJid?.endsWith('@g.us') && !message.key.fromMe) {
-        const groupJid = message.key.remoteJid;
-        const group = getGroupSettings(groupJid);
-        group.activity ||= {};
-        group.activityNames ||= {};
-        group.activity[actor] = (group.activity[actor] || 0) + 1;
-        if (message.pushName) group.activityNames[actor] = message.pushName;
-        const recent = recentGroupMessages.get(groupJid) || [];
-        recent.push(message.key);
-        if (recent.length > 1000) recent.splice(0, recent.length - 1000);
-        recentGroupMessages.set(groupJid, recent);
-        activitySinceSave += 1;
-        if (activitySinceSave >= 10) {
-          activitySinceSave = 0;
-          saveSettings().catch((error) => logger.warn({ err: error }, 'Could not persist group activity'));
-        }
-      }
-      if (message.key.remoteJid?.endsWith('@g.us') && !message.key.fromMe) {
-        const groupJid = message.key.remoteJid;
-        const group = getGroupSettings(groupJid);
-        const actorJid = senderJid(message);
-        const isStatusMention = Boolean(message.message?.groupStatusMentionMessage);
-        const mentionCount = message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length || 0;
-        const isMassTag = mentionCount >= 5;
-        const isLink = /(?:https?:\/\/|www\.|chat\.whatsapp\.com\/|wa\.me\/|t\.me\/|bit\.ly\/|(?:^|[\s([<{])(?:[a-z0-9-]+\.)+(?:com|net|org|io|co|me|app|dev|gg|xyz|info|site|online|ru|fr|cg|uk|us)(?:\b|\/))/i.test(text);
-        let reason = '';
-        if ((group.antistatusmention ?? settings.antistatusmention) && isStatusMention) reason = 'Mention de statut interdite';
-        else if ((group.antitag ?? settings.antitag) && isMassTag) reason = 'Mention massive interdite';
-        else if ((group.antilink ?? settings.antilink) && isLink) reason = 'Lien interdit';
-        else if ((group.antispam ?? settings.antispam) && warningManager.detectSpam(groupJid, actorJid)) reason = 'Spam / messages répétés';
-        if (reason) {
-          try {
-            await warningManager.warn({ groupJid, actorJid, reason });
-          } catch (error) {
-            logger.warn({ err: error, group: groupJid }, 'Could not issue group warning');
-          }
-          continue;
-        }
-      }
-      if (await handleMheFunGamesIncoming.handleIncoming(message)) continue;
-      if (await handleMheGoldIncoming(message, { mode: getMode() })) continue;
-      if (!text.startsWith(PREFIX)) continue;
-      const [name, ...args] = text.slice(PREFIX.length).trim().split(/\s+/);
-      if (!name) continue;
-      const connectedOwnerNumber = cleanNumber(socket?.user?.id || '');
-      const isOwner = Boolean(message.key.fromMe)
-        || (connectedOwnerNumber && actorNumber === connectedOwnerNumber)
-        || OWNER_NUMBERS.has(actorNumber);
-      await executeCommand(message, name.toLowerCase(), args, isOwner);
-    }
-  }, { id: 'primary', settings: primarySettings });
+  attachSessionEventHandlers(primarySocket, { id: 'primary', settings: primarySettings, settingsFile: SETTINGS_FILE });
+
 }
 
 await loadSettings();
