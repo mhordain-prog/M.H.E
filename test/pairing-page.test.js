@@ -9,6 +9,6 @@ test('pairing page script is valid JavaScript and tracks the selected session', 
   assert.ok(match, 'pairing page script exists');
   assert.doesNotThrow(() => new vm.Script(match[1]), 'pairing page script parses');
   assert.match(match[1], /targetSessionId/);
-  assert.match(match[1], /item\.state==='connected'/);
+  assert.match(match[1], /session\?\.state==='connected'/);
   assert.match(html, /numberMasked/);
 });
